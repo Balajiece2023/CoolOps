@@ -476,63 +476,124 @@ class _TechniciansAttendanceViewState extends ConsumerState<TechniciansAttendanc
                     ],
                   ),
                 ),
-                // Map markers for online technicians
+                // Map markers for online technicians mapped to true coordinates
                 Positioned.fill(
                   child: LayoutBuilder(
                     builder: (ctx, constraints) {
                       final w = constraints.maxWidth;
                       final h = constraints.maxHeight;
-                      return Stack(
-                        children: _liveLocations.asMap().entries.map((entry) {
-                          final idx = entry.key;
-                          final tech = entry.value;
-                          final user = tech['user'] ?? {};
-                          final name = user['name'] ?? 'Tech';
-                          // Scatter markers pseudo-geographically around center
-                          final xFactor = 0.2 + ((idx * 0.23 + 0.1) % 0.65);
-                          final yFactor = 0.3 + ((idx * 0.31 + 0.15) % 0.5);
+                      final centerX = w / 2;
+                      final centerY = h / 2;
 
-                          return Positioned(
-                            left: w * xFactor,
-                            top: h * yFactor,
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.all(6),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFF16A34A),
-                                    shape: BoxShape.circle,
-                                    border: Border.all(color: Colors.white, width: 2),
-                                    boxShadow: [
-                                      BoxShadow(color: const Color(0xFF16A34A).withValues(alpha: 0.4), blurRadius: 8, spreadRadius: 2),
-                                    ],
-                                  ),
-                                  child: const Icon(Icons.two_wheeler_rounded, color: Colors.white, size: 14),
+                      // Reference Central Hub: Chennai Center (13.0827° N, 80.2707° E)
+                      const double hubLat = 13.0827;
+                      const double hubLng = 80.2707;
+                      // Max coordinate span (~15km radius) mapped to radar bounds
+                      const double latSpan = 0.14;
+                      const double lngSpan = 0.14;
+
+                      return Stack(
+                        children: [
+                          // Central Operations Hub Pin
+                          Positioned(
+                            left: centerX - 24,
+                            top: centerY + 8,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: (isDark ? Colors.black : Colors.white).withValues(alpha: 0.8),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                'Chennai Hub',
+                                style: TextStyle(
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w600,
+                                  color: isDark ? AppTheme.spotifyGreen : AppTheme.primaryBlue,
                                 ),
-                                const SizedBox(height: 3),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: isDark ? AppTheme.spotifyBlack : Colors.white,
-                                    borderRadius: BorderRadius.circular(6),
-                                    boxShadow: [
-                                      BoxShadow(color: Colors.black.withValues(alpha: 0.15), blurRadius: 4),
-                                    ],
+                              ),
+                            ),
+                          ),
+                          ..._liveLocations.asMap().entries.map((entry) {
+                            final idx = entry.key;
+                            final tech = entry.value;
+                            final user = tech['user'] ?? {};
+                            final name = user['name'] ?? 'Tech';
+                            
+                            final rawLat = tech['currentLatitude'];
+                            final rawLng = tech['currentLongitude'];
+                            final double lat = (rawLat is num) ? rawLat.toDouble() : (13.0827 + ((idx * 0.02) - 0.02));
+                            final double lng = (rawLng is num) ? rawLng.toDouble() : (80.2707 + ((idx * 0.025) - 0.02));
+
+                            // Calculate projected offset relative to radar center
+                            final dLng = (lng - hubLng) / lngSpan;
+                            final dLat = (lat - hubLat) / latSpan;
+
+                            // Clamp within visible radar bounds
+                            final posX = (centerX + (dLng * (w * 0.42))).clamp(20.0, w - 80.0);
+                            final posY = (centerY - (dLat * (h * 0.40))).clamp(38.0, h - 50.0);
+
+                            return Positioned(
+                              left: posX,
+                              top: posY,
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(6),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF16A34A),
+                                      shape: BoxShape.circle,
+                                      border: Border.all(color: Colors.white, width: 2),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: const Color(0xFF16A34A).withValues(alpha: 0.45),
+                                          blurRadius: 8,
+                                          spreadRadius: 2,
+                                        ),
+                                      ],
+                                    ),
+                                    child: const Icon(Icons.two_wheeler_rounded, color: Colors.white, size: 14),
                                   ),
-                                  child: Text(
-                                    name,
-                                    style: TextStyle(
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.bold,
-                                      color: isDark ? AppTheme.textHighEmphasis : const Color(0xFF0F172A),
+                                  const SizedBox(height: 3),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: isDark ? AppTheme.spotifyBlack : Colors.white,
+                                      borderRadius: BorderRadius.circular(6),
+                                      border: Border.all(color: isDark ? AppTheme.spotifyBorder : const Color(0xFFE2E8F0)),
+                                      boxShadow: [
+                                        BoxShadow(color: Colors.black.withValues(alpha: 0.15), blurRadius: 4),
+                                      ],
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Container(
+                                          width: 6,
+                                          height: 6,
+                                          decoration: const BoxDecoration(
+                                            color: Color(0xFF16A34A),
+                                            shape: BoxShape.circle,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          name,
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.bold,
+                                            color: isDark ? AppTheme.textHighEmphasis : const Color(0xFF0F172A),
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ),
-                                ),
-                              ],
-                            ),
-                          );
-                        }).toList(),
+                                ],
+                              ),
+                            );
+                          }),
+                        ],
                       );
                     },
                   ),
@@ -559,41 +620,44 @@ class _TechniciansAttendanceViewState extends ConsumerState<TechniciansAttendanc
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: isDark ? AppTheme.spotifySurface : const Color(0xFFDCFCE7),
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: Icon(
-                              Icons.gps_fixed_rounded,
-                              color: isDark ? AppTheme.spotifyGreen : const Color(0xFF16A34A),
-                              size: 20,
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                user['name'] ?? 'Technician',
-                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-                              ),
-                              Text(
-                                '${user['phone'] ?? ''} • $areas',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: isDark ? AppTheme.textMediumEmphasis : const Color(0xFF64748B),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: isDark ? AppTheme.spotifySurface : const Color(0xFFDCFCE7),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Icon(
+                          Icons.gps_fixed_rounded,
+                          color: isDark ? AppTheme.spotifyGreen : const Color(0xFF16A34A),
+                          size: 20,
+                        ),
                       ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              user['name'] ?? 'Technician',
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            Text(
+                              '${user['phone'] ?? ''} • $areas',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: isDark ? AppTheme.textMediumEmphasis : const Color(0xFF64748B),
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                         decoration: BoxDecoration(
