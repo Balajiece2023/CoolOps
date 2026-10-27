@@ -1,0 +1,576 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  ADMIN
+  BOOKING_STAFF
+  TECHNICIAN
+  ACCOUNTANT
+}
+
+enum TicketPriority {
+  LOW
+  MEDIUM
+  HIGH
+  EMERGENCY
+}
+
+enum RequestStatus {
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+  ALTERNATIVE_PROPOSED
+  CANCELLED
+}
+
+enum BookingStatus {
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+}
+
+enum AssignmentStatus {
+  ASSIGNED
+  ACCEPTED
+  DECLINED
+  CANCELLED
+}
+
+enum JobStatus {
+  PENDING
+  EN_ROUTE
+  ARRIVED
+  IN_PROGRESS
+  OTP_PENDING
+  COMPLETED
+  CANCELLED
+}
+
+enum StockMovementType {
+  INWARD
+  OUTWARD_JOB
+  ADJUSTMENT
+  RETURN
+}
+
+enum InvoiceStatus {
+  DRAFT
+  ISSUED
+  PARTIALLY_PAID
+  PAID
+  CANCELLED
+}
+
+enum PaymentMethod {
+  CASH
+  UPI
+  CARD
+  BANK_TRANSFER
+}
+
+enum PaymentStatus {
+  SUCCESS
+  FAILED
+  REFUNDED
+}
+
+enum OutboxStatus {
+  PENDING
+  PROCESSING
+  SENT
+  FAILED
+}
+
+model User {
+  id           String       @id @default(uuid())
+  email        String       @unique
+  passwordHash String
+  name         String
+  role         Role
+  phone        String?
+  isActive     Boolean      @default(true)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  technician   Technician?
+  auditLogs    AuditLog[]
+  createdInvoices Invoice[]
+  recordedPayments Payment[]
+
+  @@map("users")
+}
+
+model Technician {
+  id              String       @id @default(uuid())
+  userId          String       @unique
+  skills          String[]     // e.g. ["SPLIT", "CASSETTE", "INVERTER", "GAS_LEAKAGE", "ELECTRICAL"]
+  serviceAreas    String[]     // e.g. ["North Zone", "Central", "OMR", "Tambaram"]
+  maxDailyJobs    Int          @default(4)
+  isAvailable     Boolean      @default(true)
+  isOnline        Boolean      @default(false)
+  currentLatitude Float?
+  currentLongitude Float?
+  lastLocationAt  DateTime?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  user            User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  assignments     TechnicianAssignment[]
+  serviceJobs     ServiceJob[]
+  attendances     TechnicianAttendance[]
+  locationLogs    TechnicianLocationLog[]
+
+  @@map("technicians")
+}
+
+model Customer {
+  id            String            @id @default(uuid())
+  phone         String            @unique
+  name          String
+  email         String?
+  language      String            @default("en") // "en" or "ta"
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  addresses     CustomerAddress[]
+  acUnits       AcUnit[]
+  bookingRequests BookingRequest[]
+  bookings      Booking[]
+  invoices      Invoice[]
+
+  @@map("customers")
+}
+
+model CustomerAddress {
+  id            String            @id @default(uuid())
+  customerId    String
+  addressLine   String
+  landmark      String?
+  area          String            // e.g. "Adyar", "Anna Nagar"
+  city          String            @default("Chennai")
+  pincode       String
+  isDefault     Boolean           @default(false)
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  customer      Customer          @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  acUnits       AcUnit[]
+  bookingRequests BookingRequest[]
+  bookings      Booking[]
+
+  @@map("customer_addresses")
+}
+
+model AcUnit {
+  id             String           @id @default(uuid())
+  customerId     String
+  addressId      String?
+  brand          String           // e.g. "Daikin", "Voltas", "LG"
+  modelNumber    String?
+  tonnage        Float            // e.g. 1.0, 1.5, 2.0
+  unitType       String           // "SPLIT", "WINDOW", "CASSETTE", "DUCTED"
+  installationYear Int?
+  locationInHouse String?         // "Master Bedroom", "Living Room"
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  customer       Customer         @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  address        CustomerAddress? @relation(fields: [addressId], references: [id], onDelete: SetNull)
+  serviceJobs    ServiceJob[]
+  bookingRequests BookingRequest[]
+
+  @@map("ac_units")
+}
+
+model ServiceType {
+  id             String           @id @default(uuid())
+  code           String           @unique // e.g. "WASH", "GAS_CHARGE", "GENERAL_CHECKUP", "INSTALLATION", "UNINSTALLATION"
+  nameEn         String
+  nameTa         String
+  description    String?
+  basePrice      Float
+  estimatedMinutes Int            @default(90)
+  isActive       Boolean          @default(true)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  bookingRequests BookingRequest[]
+  bookings       Booking[]
+
+  @@map("service_types")
+}
+
+model WhatsAppConversation {
+  id                 String       @id @default(uuid())
+  waPhone            String       @unique // E.164 phone number
+  customerName       String?
+  language           String       @default("en") // "en" | "ta"
+  step               String       @default("WELCOME") // State machine state
+  sessionData        Json         @default("{}") // In-progress wizard collected keys
+  lastInteractionAt  DateTime     @default(now())
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+
+  messages           WhatsAppMessage[]
+
+  @@map("whatsapp_conversations")
+}
+
+model WhatsAppMessage {
+  id             String       @id @default(uuid())
+  conversationId String
+  providerMessageId String?   @unique // WAMID for deduplication
+  direction      String       // "INBOUND" or "OUTBOUND"
+  messageBody    String
+  status         String       @default("SENT") // "RECEIVED", "SENT", "DELIVERED", "READ", "FAILED"
+  rawPayload     Json?
+  createdAt      DateTime     @default(now())
+
+  conversation   WhatsAppConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([providerMessageId])
+  @@map("whatsapp_messages")
+}
+
+model BookingRequest {
+  id               String         @id @default(uuid())
+  referenceNumber  String         @unique // e.g. "REQ-20261016-0001"
+  customerId       String
+  addressId        String
+  serviceTypeId    String
+  acUnitId         String?
+  complaint        String
+  acTonnage        Float?
+  acBrand          String?
+  acType           String?
+  priority         TicketPriority @default(MEDIUM)
+  isStaffCreated   Boolean        @default(false)
+  createdByStaffId String?
+  preferredDate    DateTime       // Stored in UTC (representing slot date)
+  preferredTimeSlot String        // e.g. "09:00-11:00", "11:00-13:00", "14:00-16:00", "16:00-18:00"
+  status           RequestStatus  @default(PENDING_APPROVAL)
+  isDeleted        Boolean        @default(false)
+  rejectionReason  String?
+  proposedDate     DateTime?
+  proposedTimeSlot String?
+  customerAcceptedProposed Boolean?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  customer         Customer       @relation(fields: [customerId], references: [id])
+  address          CustomerAddress @relation(fields: [addressId], references: [id])
+  serviceType      ServiceType    @relation(fields: [serviceTypeId], references: [id])
+  acUnit           AcUnit?        @relation(fields: [acUnitId], references: [id])
+  booking          Booking?
+
+  @@index([status])
+  @@index([isDeleted])
+  @@map("booking_requests")
+}
+
+model Booking {
+  id                 String         @id @default(uuid())
+  bookingNumber      String         @unique // e.g. "BKG-20261016-0001"
+  bookingRequestId   String?        @unique
+  customerId         String
+  addressId          String
+  serviceTypeId      String
+  scheduledDate      DateTime       // UTC start date
+  timeSlot           String         // e.g. "09:00-11:00"
+  status             BookingStatus  @default(CONFIRMED)
+  totalEstimate      Float
+  notes              String?
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+
+  bookingRequest     BookingRequest? @relation(fields: [bookingRequestId], references: [id], onDelete: SetNull)
+  customer           Customer       @relation(fields: [customerId], references: [id])
+  address            CustomerAddress @relation(fields: [addressId], references: [id])
+  serviceType        ServiceType    @relation(fields: [serviceTypeId], references: [id])
+  assignments        TechnicianAssignment[]
+  serviceJob         ServiceJob?
+
+  @@map("bookings")
+}
+
+model TechnicianAssignment {
+  id                 String           @id @default(uuid())
+  bookingId          String
+  technicianId       String
+  assignedSlotStart  DateTime         // UTC slot start
+  assignedSlotEnd    DateTime         // UTC slot end
+  status             AssignmentStatus @default(ASSIGNED)
+  assignedByUserId   String
+  assignedAt         DateTime         @default(now())
+
+  booking            Booking          @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  technician         Technician       @relation(fields: [technicianId], references: [id])
+
+  @@index([technicianId, assignedSlotStart, assignedSlotEnd])
+  @@map("technician_assignments")
+}
+
+model ServiceJob {
+  id                 String         @id @default(uuid())
+  jobNumber          String         @unique // e.g. "JOB-20261016-0001"
+  bookingId          String         @unique
+  technicianId       String
+  acUnitId           String?
+  status             JobStatus      @default(PENDING)
+  diagnosis          String?
+  resolutionNotes    String?
+  closureOtp         String?        // 6-digit verification OTP
+  closureOtpExpiresAt DateTime?
+  alternateOtpPhone  String?        // Customer's alternate mobile for closure OTP
+  isOtpVerified      Boolean        @default(false)
+  otpAttempts        Int            @default(0)
+  startedAt          DateTime?
+  enRouteAt          DateTime?
+  arrivedAt          DateTime?
+  completedAt        DateTime?
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+
+  booking            Booking        @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  technician         Technician     @relation(fields: [technicianId], references: [id])
+  acUnit             AcUnit?        @relation(fields: [acUnitId], references: [id])
+  checklistItems     JobChecklistItem[]
+  attachments        JobAttachment[]
+  partsConsumed      JobPartConsumed[]
+  invoices           Invoice[]
+
+  @@map("service_jobs")
+}
+
+model JobChecklistItem {
+  id                 String         @id @default(uuid())
+  jobId              String
+  taskName           String         // e.g. "Inspect Air Filters", "Check Gas Pressure", "Amperage Test", "Drain Pipe Flow"
+  isChecked          Boolean        @default(false)
+  notes              String?
+  completedAt        DateTime?
+
+  job                ServiceJob     @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@map("job_checklist_items")
+}
+
+model JobAttachment {
+  id                 String         @id @default(uuid())
+  jobId              String
+  attachmentType     String         // "BEFORE_PHOTO", "AFTER_PHOTO", "REPORT", "DIAGNOSIS_SIGNATURE"
+  fileUrl            String
+  caption            String?
+  uploadedAt         DateTime       @default(now())
+
+  job                ServiceJob     @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@map("job_attachments")
+}
+
+model InventoryPart {
+  id                 String         @id @default(uuid())
+  sku                String         @unique
+  name               String
+  category           String         // "CAPACITOR", "GAS_R32", "GAS_R410A", "COPPER_PIPE", "REMOTE", "MOTOR"
+  unitPrice          Float
+  sellingPrice       Float
+  currentStock       Int            @default(0)
+  minStockAlertLevel Int            @default(5)
+  supplierName       String?
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+
+  movements          StockMovement[]
+  consumedInJobs     JobPartConsumed[]
+  invoiceItems       InvoiceItem[]
+
+  @@map("inventory_parts")
+}
+
+model JobPartConsumed {
+  id                 String         @id @default(uuid())
+  jobId              String
+  partId             String
+  quantity           Int            @default(1)
+  unitPrice          Float
+  createdAt          DateTime       @default(now())
+
+  job                ServiceJob     @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  part               InventoryPart  @relation(fields: [partId], references: [id])
+
+  @@map("job_parts_consumed")
+}
+
+model StockMovement {
+  id                 String             @id @default(uuid())
+  partId             String
+  type               StockMovementType
+  quantity           Int                // positive for addition, negative/positive handled by type
+  balanceAfter       Int
+  reference          String?            // "JOB-20261016-0001", "PO-1092"
+  notes              String?
+  createdAt          DateTime           @default(now())
+
+  part               InventoryPart      @relation(fields: [partId], references: [id], onDelete: Cascade)
+
+  @@map("stock_movements")
+}
+
+model Invoice {
+  id                 String         @id @default(uuid())
+  invoiceNumber      String         @unique // e.g. "INV-20261016-0001"
+  customerId         String
+  serviceJobId       String?
+  subtotal           Float
+  discount           Float          @default(0)
+  taxRate            Float          @default(18.0) // GST 18%
+  taxAmount          Float          @default(0)
+  totalAmount        Float
+  paidAmount         Float          @default(0)
+  status             InvoiceStatus  @default(ISSUED)
+  dueDate            DateTime
+  createdById        String
+  notes              String?
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+
+  customer           Customer       @relation(fields: [customerId], references: [id])
+  serviceJob         ServiceJob?    @relation(fields: [serviceJobId], references: [id], onDelete: SetNull)
+  createdBy          User           @relation(fields: [createdById], references: [id])
+  items              InvoiceItem[]
+  payments           Payment[]
+
+  @@map("invoices")
+}
+
+model InvoiceItem {
+  id                 String         @id @default(uuid())
+  invoiceId          String
+  partId             String?
+  description        String
+  quantity           Int            @default(1)
+  unitPrice          Float
+  totalPrice         Float
+
+  invoice            Invoice        @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  part               InventoryPart? @relation(fields: [partId], references: [id], onDelete: SetNull)
+
+  @@map("invoice_items")
+}
+
+model Payment {
+  id                 String         @id @default(uuid())
+  receiptNumber      String         @unique // e.g. "RCT-20261016-0001"
+  invoiceId          String
+  amount             Float
+  paymentMethod      PaymentMethod
+  referenceNumber    String?        // UPI Txn ID, Card Txn ID
+  status             PaymentStatus  @default(SUCCESS)
+  notes              String?
+  receivedById       String
+  paymentDate        DateTime       @default(now())
+  createdAt          DateTime       @default(now())
+
+  invoice            Invoice        @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  receivedBy         User           @relation(fields: [receivedById], references: [id])
+
+  @@map("payments")
+}
+
+model Expense {
+  id                 String         @id @default(uuid())
+  category           String         // "FUEL", "TOOL_PURCHASE", "REFRESHMENT", "MAINTENANCE"
+  amount             Float
+  description        String
+  expenseDate        DateTime       @default(now())
+  recordedByUserId   String
+  createdAt          DateTime       @default(now())
+
+  @@map("expenses")
+}
+
+model Notification {
+  id                 String         @id @default(uuid())
+  userId             String
+  title              String
+  body               String
+  isRead             Boolean        @default(false)
+  linkUrl            String?
+  createdAt          DateTime       @default(now())
+
+  @@map("notifications")
+}
+
+model OutboxEvent {
+  id                 String         @id @default(uuid())
+  eventType          String         // "WHATSAPP_SEND_MESSAGE", "JOB_ASSIGNED_SMS", "INVOICE_GENERATED"
+  payload            Json
+  status             OutboxStatus   @default(PENDING)
+  retryCount         Int            @default(0)
+  maxRetries         Int            @default(3)
+  lastError          String?
+  createdAt          DateTime       @default(now())
+  processedAt        DateTime?
+
+  @@index([status])
+  @@map("outbox_events")
+}
+
+model AuditLog {
+  id                 String         @id @default(uuid())
+  userId             String?
+  action             String         // "APPROVE_REQUEST", "ASSIGN_TECH", "CREATE_INVOICE", "CANCEL_BOOKING"
+  entityType         String         // "BookingRequest", "TechnicianAssignment", "Invoice"
+  entityId           String
+  oldValues          Json?
+  newValues          Json?
+  ipAddress          String?
+  createdAt          DateTime       @default(now())
+
+  user               User?          @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([entityType, entityId])
+  @@map("audit_logs")
+}
+
+model TechnicianAttendance {
+  id               String       @id @default(uuid())
+  technicianId     String
+  date             DateTime     // Calendar date at 00:00:00 UTC
+  clockInAt        DateTime     @default(now())
+  clockOutAt       DateTime?
+  clockInLatitude  Float?
+  clockInLongitude Float?
+  clockOutLatitude Float?
+  clockOutLongitude Float?
+  totalMinutes     Int?         @default(0)
+  notes            String?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  technician       Technician   @relation(fields: [technicianId], references: [id], onDelete: Cascade)
+
+  @@unique([technicianId, date])
+  @@index([date])
+  @@map("technician_attendances")
+}
+
+model TechnicianLocationLog {
+  id           String       @id @default(uuid())
+  technicianId String
+  latitude     Float
+  longitude    Float
+  recordedAt   DateTime     @default(now())
+
+  technician   Technician   @relation(fields: [technicianId], references: [id], onDelete: Cascade)
+
+  @@index([technicianId, recordedAt])
+  @@map("technician_location_logs")
+}

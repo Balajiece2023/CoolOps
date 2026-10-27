@@ -1,0 +1,39 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: acservice_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgrespassword
+      POSTGRES_DB: acservice_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: acservice_backend
+    restart: always
+    depends_on:
+      - postgres
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      API_PREFIX: /api/v1
+      DATABASE_URL: postgresql://postgres:postgrespassword@postgres:5432/acservice_db?schema=public
+      JWT_ACCESS_SECRET: prod_access_secret_super_secure_32_characters_minimum
+      JWT_REFRESH_SECRET: prod_refresh_secret_super_secure_32_characters_minimum
+      META_WHATSAPP_ENABLED: "false"
+      META_WHATSAPP_API_VERSION: "v21.0"
+      META_WHATSAPP_WEBHOOK_VERIFY_TOKEN: "frostpro_meta_verify_token_2026"
+    ports:
+      - "4000:4000"
+
+volumes:
+  postgres_data:

@@ -1,0 +1,59 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Testing
+coverage/
+
+# Production
+dist/
+build/
+
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+*.log
+
+# Prisma
+backend/prisma/*.db
+backend/prisma/*.db-journal
+
+# Uploads
+backend/uploads/*
+!backend/uploads/.gitkeep
+
+# Flutter / Dart
+mobile/.dart_tool/
+mobile/.flutter-plugins
+mobile/.flutter-plugins-dependencies
+mobile/.pub-cache/
+mobile/.pub/
+mobile/build/
+mobile/android/app/debug
+mobile/android/app/profile
+mobile/android/app/release
+mobile/.widget_preview/
+
+# Operating System files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE files
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/*
+!.vscode/launch.json
+!.vscode/tasks.json
