@@ -1,21 +1,27 @@
 import 'package:flutter/material.dart';
 
 /// Central branding and customizable asset configuration.
-/// In the future, to rebrand the application or replace logos/icons:
-/// 1. Replace the file in `assets/images/logo.png` or `assets/images/frostpro_logo.png`
-/// 2. Or simply change the file path constant below.
 class AppBranding {
   // Brand Names & Tagline
-  static const String appName = 'FrostPro';
-  static const String appTagline = 'Enterprise Air Conditioning Service & HVAC Operations';
-  static const String companyName = 'FrostPro AC Solutions Pvt Ltd';
-  static const String supportPhone = '+91 98765 43210';
-  static const String supportEmail = 'support@frostpro.in';
+  static const String appName = 'Caring Cool Tech';
+  static const String appTagline = 'Air Conditioning & HVAC Service Operations';
+  static const String companyName = 'CARING COOL TECH';
+  static const String address = 'GR FL NO.1NETHA NAGAR VALARAMPET PUDUCHERRY-605 004';
+  static const String supportPhone = '9677686561';
+  static const String supportEmail = 'caringcooltech@gmail.com';
+  static const String gstin = '34BYEPA2853E1ZX';
+  static const String state = '34-Puducherry';
 
-  // Asset Paths (Customizable)
-  static const String appLogo = 'assets/images/frostpro_logo.png';
-  static const String appIcon = 'assets/images/frostpro_logo.png';
-  
+  // Bank Details
+  static const String bankName = 'CITY UNION BANK 93 VILLIANUR ROAD,REDDIARPALAYAM';
+  static const String bankAccountNo = '510909010146288';
+  static const String bankIfsc = 'CIUB0000421';
+  static const String bankHolder = 'CARING COOL TECH';
+
+  // Asset Paths
+  static const String appLogo = 'assets/images/cct_logo.png';
+  static const String appIcon = 'assets/images/cct_logo.png';
+
   // Custom Logo Widget helper with fallback gracefully handled
   static Widget buildLogo({
     double? width,
@@ -33,11 +39,11 @@ class AppBranding {
           width: width ?? 60,
           height: height ?? 60,
           decoration: BoxDecoration(
-            color: const Color(0xFF0284C7).withValues(alpha: 0.1),
+            color: const Color(0xFF1E75BB).withValues(alpha: 0.1),
             borderRadius: borderRadius ?? BorderRadius.circular(12),
           ),
           child: const Center(
-            child: Icon(Icons.ac_unit, color: Color(0xFF0284C7), size: 32),
+            child: Icon(Icons.ac_unit, color: Color(0xFF1E75BB), size: 32),
           ),
         );
       },

@@ -11,7 +11,11 @@ import 'technicians_attendance_view.dart';
 import 'clients_360_view.dart';
 import 'inventory_view.dart';
 import 'billing_view.dart';
+import 'expenses_view.dart';
+import 'field_service_reports_view.dart';
 import 'profile_screen.dart';
+import 'user_management_view.dart';
+import '../widgets/user_avatar.dart';
 
 class HomeShellScreen extends ConsumerStatefulWidget {
   const HomeShellScreen({super.key});
@@ -109,6 +113,28 @@ class _HomeShellScreenState extends ConsumerState<HomeShellScreen> {
               ),
               const SizedBox(height: 10),
               _buildMoreTile(
+                icon: Icons.assignment_outlined,
+                title: 'Field Service Reports (FSR)',
+                subtitle: 'Physical form style sheets, observations, technical parameters & PDF',
+                color: const Color(0xFF0284C7),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => const FieldServiceReportsView()));
+                },
+              ),
+              const SizedBox(height: 10),
+              _buildMoreTile(
+                icon: Icons.account_balance_wallet_outlined,
+                title: 'Daily Expenses & Float Tracker',
+                subtitle: 'Track day-to-day tech expenses & allocate advance cash float',
+                color: const Color(0xFF0D9488),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => const Scaffold(body: ExpensesView())));
+                },
+              ),
+              const SizedBox(height: 10),
+              _buildMoreTile(
                 icon: Icons.person_outline,
                 title: 'Account Settings & Preferences',
                 subtitle: 'Profile details, appearance & password',
@@ -118,6 +144,19 @@ class _HomeShellScreenState extends ConsumerState<HomeShellScreen> {
                   Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfileView()));
                 },
               ),
+              if (ref.read(authStateProvider)?.role == UserRole.admin) ...[
+                const SizedBox(height: 10),
+                _buildMoreTile(
+                  icon: Icons.manage_accounts_outlined,
+                  title: 'Admin User Management',
+                  subtitle: 'Add new staff, assign roles (Admin/Tech/Staff) & delete users',
+                  color: AppTheme.accentRose,
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    Navigator.push(context, MaterialPageRoute(builder: (_) => const UserManagementView()));
+                  },
+                ),
+              ],
             ],
           ),
         );
@@ -169,7 +208,15 @@ class _HomeShellScreenState extends ConsumerState<HomeShellScreen> {
   @override
   Widget build(BuildContext context) {
     final user = ref.watch(authStateProvider);
-    final role = user?.role ?? UserRole.admin;
+    if (user == null) {
+      // User is logged out or transitioning; render blank scaffold to prevent errors
+      return const Scaffold(
+        body: Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+    final role = user.role;
 
     // Filter streamlined 3-4 bottom bar pages
     final List<Widget> pages = [];
@@ -191,10 +238,14 @@ class _HomeShellScreenState extends ConsumerState<HomeShellScreen> {
     } else if (role == UserRole.technician) {
       pages.addAll([
         const TechnicianJobsView(),
+        const FieldServiceReportsView(),
+        const ExpensesView(),
         const InventoryView(),
       ]);
       destinations.addAll(const [
         NavigationDestination(icon: Icon(Icons.handyman_outlined), selectedIcon: Icon(Icons.handyman_rounded), label: 'My Assigned Jobs'),
+        NavigationDestination(icon: Icon(Icons.assignment_outlined), selectedIcon: Icon(Icons.assignment_rounded), label: 'FSR Reports'),
+        NavigationDestination(icon: Icon(Icons.account_balance_wallet_outlined), selectedIcon: Icon(Icons.account_balance_wallet_rounded), label: 'Daily Expenses'),
         NavigationDestination(icon: Icon(Icons.inventory_2_outlined), selectedIcon: Icon(Icons.inventory_2_rounded), label: 'Parts Catalog'),
       ]);
     } else if (role == UserRole.bookingStaff) {
@@ -255,13 +306,10 @@ class _HomeShellScreenState extends ConsumerState<HomeShellScreen> {
             ),
           IconButton(
             tooltip: 'Profile & Settings',
-            icon: CircleAvatar(
+            icon: UserAvatar(
+              avatarUrl: user?.avatarUrl,
+              name: user?.name ?? 'User',
               radius: 14,
-              backgroundColor: AppTheme.primaryBlue.withOpacity(0.15),
-              child: Text(
-                (user?.name.isNotEmpty == true) ? user!.name[0].toUpperCase() : 'U',
-                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.primaryBlue),
-              ),
             ),
             onPressed: () {
               Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfileView()));

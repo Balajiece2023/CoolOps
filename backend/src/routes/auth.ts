@@ -1,11 +1,13 @@
 import { Router, Request, Response } from 'express';
-import bcrypt from 'bcrypt';
-import jwt from 'jsonwebtoken';
+import * as bcrypt from 'bcrypt';
+import * as jwt from 'jsonwebtoken';
 import { z } from 'zod';
 import { prisma } from '../prisma';
 import { config } from '../config';
 import { validateBody } from '../middleware/validate';
 import { authenticate } from '../middleware/auth';
+import { emailService } from '../services/emailService';
+import { otpService } from '../services/otpService';
 
 export const authRouter = Router();
 
@@ -48,8 +50,8 @@ authRouter.post('/login', validateBody(loginSchema), async (req: Request, res: R
     technicianId: user.technician?.id
   };
 
-  const accessToken = jwt.sign(payload, config.jwt.accessSecret, { expiresIn: '1d' });
-  const refreshToken = jwt.sign({ userId: user.id }, config.jwt.refreshSecret, { expiresIn: '7d' });
+  const accessToken = jwt.sign(payload, config.jwt.accessSecret, { expiresIn: '30d' });
+  const refreshToken = jwt.sign({ userId: user.id }, config.jwt.refreshSecret, { expiresIn: '90d' });
 
   return res.json({
     success: true,
@@ -62,6 +64,7 @@ authRouter.post('/login', validateBody(loginSchema), async (req: Request, res: R
         name: user.name,
         role: user.role,
         phone: user.phone,
+        avatarUrl: user.avatarUrl,
         technicianId: user.technician?.id
       }
     }
@@ -88,7 +91,7 @@ authRouter.post('/refresh', validateBody(refreshSchema), async (req: Request, re
       technicianId: user.technician?.id
     };
 
-    const newAccessToken = jwt.sign(payload, config.jwt.accessSecret, { expiresIn: '1d' });
+    const newAccessToken = jwt.sign(payload, config.jwt.accessSecret, { expiresIn: '30d' });
     return res.json({
       success: true,
       data: { accessToken: newAccessToken }
@@ -107,6 +110,7 @@ authRouter.get('/me', authenticate, async (req: Request, res: Response) => {
       name: true,
       role: true,
       phone: true,
+      avatarUrl: true,
       technician: {
         select: { id: true, skills: true, serviceAreas: true, isAvailable: true, isOnline: true, currentLatitude: true, currentLongitude: true }
       }
@@ -118,16 +122,18 @@ authRouter.get('/me', authenticate, async (req: Request, res: Response) => {
 
 const updateProfileSchema = z.object({
   name: z.string().min(2).optional(),
-  phone: z.string().min(10).optional()
+  phone: z.string().min(10).optional(),
+  avatarUrl: z.string().optional().nullable()
 });
 
 authRouter.put('/me', authenticate, validateBody(updateProfileSchema), async (req: Request, res: Response) => {
-  const { name, phone } = req.body;
+  const { name, phone, avatarUrl } = req.body;
   const updatedUser = await prisma.user.update({
     where: { id: req.user!.userId },
     data: {
       name: name ?? undefined,
-      phone: phone ?? undefined
+      phone: phone ?? undefined,
+      avatarUrl: avatarUrl !== undefined ? (avatarUrl === '' ? null : avatarUrl) : undefined
     },
     select: {
       id: true,
@@ -135,6 +141,7 @@ authRouter.put('/me', authenticate, validateBody(updateProfileSchema), async (re
       name: true,
       role: true,
       phone: true,
+      avatarUrl: true,
       technician: {
         select: { id: true, skills: true, serviceAreas: true, isAvailable: true, isOnline: true, currentLatitude: true, currentLongitude: true }
       }
@@ -166,21 +173,32 @@ authRouter.post('/forgot-password', validateBody(forgotPasswordSchema), async (r
     });
   }
 
-  // Generate 6-digit OTP
-  const otp = Math.floor(100000 + Math.random() * 900000).toString();
+  // Generate 6-digit secure cryptographic OTP using open-source otplib/crypto
+  const otp = otpService.generateSecureOtp();
   const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes
 
   passwordResetStore.set(email.toLowerCase(), { otp, expiresAt });
 
   console.log(`🔐 [AUTH] Password reset OTP generated for ${email}: ${otp}`);
 
+  // Send OTP via open-source Nodemailer email module
+  const mailResult = await emailService.sendTechnicianPasswordResetOtp({
+    to: user.email,
+    name: user.name,
+    otp
+  });
+
   return res.json({
     success: true,
-    message: `Password reset OTP has been sent. (Demo OTP: ${otp})`,
+    message: mailResult.success
+      ? `Password reset OTP has been sent to your email (${user.email}).`
+      : `Password reset OTP generated. Email notification status: ${mailResult.error || 'simulated'}.`,
     data: {
-      email,
-      demoOtp: otp,
-      expiresInMinutes: 10
+      email: user.email,
+      emailDispatched: mailResult.success,
+      expiresInMinutes: 10,
+      // Provide demoOtp in development for smooth local testing
+      demoOtp: process.env.NODE_ENV !== 'production' ? otp : undefined
     }
   });
 });

@@ -36,14 +36,19 @@ class DashboardView extends ConsumerWidget {
             ),
             child: Row(
               children: [
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: AppTheme.primaryBlue.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: AppTheme.primaryBlue.withOpacity(0.4)),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: Container(
+                    width: 50,
+                    height: 50,
+                    color: Colors.white,
+                    padding: const EdgeInsets.all(4),
+                    child: Image.asset(
+                      'assets/images/cct_logo.png',
+                      fit: BoxFit.contain,
+                      errorBuilder: (_, __, ___) => const Icon(Icons.ac_unit, color: AppTheme.primaryBlue, size: 28),
+                    ),
                   ),
-                  child: const Icon(Icons.ac_unit, color: Color(0xFF38BDF8), size: 30),
                 ),
                 const SizedBox(width: 14),
                 const Expanded(
@@ -51,12 +56,12 @@ class DashboardView extends ConsumerWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'FrostPro AC Solutions',
+                        'Caring Cool Tech',
                         style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
                       ),
                       SizedBox(height: 2),
                       Text(
-                        'Field Service Management & Dispatch',
+                        'Air Conditioning & HVAC Service Management',
                         style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
                       ),
                     ],

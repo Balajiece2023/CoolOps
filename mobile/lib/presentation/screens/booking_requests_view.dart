@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../core/network/api_client.dart';
 import '../../core/theme/app_theme.dart';
 import '../../data/models/models.dart';
 import '../providers/app_providers.dart';
+import 'technician_live_tracking_screen.dart';
+import '../../core/services/location_service.dart';
 
 class BookingRequestsView extends ConsumerStatefulWidget {
   const BookingRequestsView({super.key});
@@ -55,6 +58,12 @@ class _BookingRequestsViewState extends ConsumerState<BookingRequestsView> {
                 ),
                 const SizedBox(width: 8),
                 _FilterChip(
+                  label: 'On Hold ⏸️',
+                  isSelected: _selectedStatus == 'ON_HOLD',
+                  onSelected: () => setState(() => _selectedStatus = 'ON_HOLD'),
+                ),
+                const SizedBox(width: 8),
+                _FilterChip(
                   label: 'All Tickets',
                   isSelected: _selectedStatus == '',
                   onSelected: () => setState(() => _selectedStatus = ''),
@@ -93,11 +102,14 @@ class _BookingRequestsViewState extends ConsumerState<BookingRequestsView> {
                       return _RequestCard(
                         request: req,
                         isAdmin: isAdmin,
+                        onOverviewPressed: () => _showBookingOverview(context, req),
                         onApprovePressed: () => _showApproveDialog(context, req),
                         onRejectPressed: () => _showRejectDialog(context, req),
                         onProposePressed: () => _showProposeDialog(context, req),
+                        onHoldPressed: () => _showHoldDialog(context, req),
                         onEditPressed: () => _showEditBookingDialog(context, req),
                         onDeletePressed: () => _showDeleteBookingDialog(context, req),
+                        onReassignPressed: () => _showReassignDialog(context, req),
                       );
                     },
                   );
@@ -115,13 +127,18 @@ class _BookingRequestsViewState extends ConsumerState<BookingRequestsView> {
     final phoneCtrl = TextEditingController();
     final addrCtrl = TextEditingController();
     final areaCtrl = TextEditingController();
-    final pinCtrl = TextEditingController(text: '600020');
+    final pinCtrl = TextEditingController(text: '605001');
     final complaintCtrl = TextEditingController();
     final brandCtrl = TextEditingController(text: 'Daikin');
     final dateCtrl = TextEditingController(text: DateTime.now().add(const Duration(days: 1)).toString().split(' ')[0]);
+    final customServiceCtrl = TextEditingController();
+    final locationLinkCtrl = TextEditingController();
+    double? detectedLat;
+    double? detectedLng;
+    bool isDetectingGps = false;
     String priority = 'MEDIUM';
     String timeSlot = '09:00-11:00';
-    String serviceId = '00000000-0000-0000-0000-000000000001'; // Default service
+    String selectedServiceCode = 'CHECKUP';
     String acType = 'SPLIT';
 
     showDialog(
@@ -172,9 +189,101 @@ class _BookingRequestsViewState extends ConsumerState<BookingRequestsView> {
                       ),
                     ],
                   ),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: detectedLat != null ? const Color(0xFF16A34A) : AppTheme.primaryBlue,
+                        side: BorderSide(color: detectedLat != null ? const Color(0xFF16A34A) : AppTheme.primaryBlue),
+                        visualDensity: VisualDensity.compact,
+                      ),
+                      icon: isDetectingGps
+                          ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                          : Icon(detectedLat != null ? Icons.check_circle : Icons.my_location, size: 16),
+                      label: Text(
+                        detectedLat != null
+                            ? '📍 Exact GPS Attached (${detectedLat!.toStringAsFixed(4)}, ${detectedLng!.toStringAsFixed(4)})'
+                            : '📍 Auto-Capture Customer GPS Location',
+                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                      ),
+                      onPressed: isDetectingGps
+                          ? null
+                          : () async {
+                              setDialogState(() => isDetectingGps = true);
+                              try {
+                                final pos = await LocationService.getCurrentPosition();
+                                if (pos != null) {
+                                  setDialogState(() {
+                                    detectedLat = pos.latitude;
+                                    detectedLng = pos.longitude;
+                                    isDetectingGps = false;
+                                  });
+                                  if (ctx.mounted) {
+                                    ScaffoldMessenger.of(ctx).showSnackBar(
+                                      SnackBar(
+                                        content: Text('📍 Exact GPS captured (${pos.latitude.toStringAsFixed(4)}, ${pos.longitude.toStringAsFixed(4)})'),
+                                        backgroundColor: const Color(0xFF16A34A),
+                                      ),
+                                    );
+                                  }
+                                } else {
+                                  setDialogState(() => isDetectingGps = false);
+                                  if (ctx.mounted) {
+                                    ScaffoldMessenger.of(ctx).showSnackBar(
+                                      const SnackBar(content: Text('Could not obtain GPS fix. Address will be geocoded automatically.')),
+                                    );
+                                  }
+                                }
+                              } catch (_) {
+                                setDialogState(() => isDetectingGps = false);
+                              }
+                            },
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: locationLinkCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Google Maps Link / WhatsApp Location (Optional)',
+                      hintText: 'e.g. https://maps.app.goo.gl/... or coordinates',
+                      prefixIcon: Icon(Icons.link, size: 18),
+                      isDense: true,
+                    ),
+                  ),
                   const Divider(height: 24),
                   const Text('Ticket Details', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppTheme.primaryBlue)),
                   const SizedBox(height: 6),
+                  DropdownButtonFormField<String>(
+                    value: selectedServiceCode,
+                    isExpanded: true,
+                    decoration: const InputDecoration(labelText: 'Service Type / Package *'),
+                    items: const [
+                      DropdownMenuItem(value: 'CHECKUP', child: Text('Comprehensive AC Inspection (₹499)', overflow: TextOverflow.ellipsis)),
+                      DropdownMenuItem(value: 'WASH', child: Text('Jet Pump Foam Wash & Cleaning (₹699)', overflow: TextOverflow.ellipsis)),
+                      DropdownMenuItem(value: 'GAS_CHARGE', child: Text('Gas Leak Detection & Top-up (₹1499)', overflow: TextOverflow.ellipsis)),
+                      DropdownMenuItem(value: 'PCB_REPAIR', child: Text('Inverter PCB Board Diagnostics & Repair (₹1200)', overflow: TextOverflow.ellipsis)),
+                      DropdownMenuItem(value: 'INSTALLATION', child: Text('Split AC New Installation (₹1500)', overflow: TextOverflow.ellipsis)),
+                      DropdownMenuItem(value: 'UNINSTALLATION', child: Text('Split AC Uninstallation & Safe Packing (₹799)', overflow: TextOverflow.ellipsis)),
+                      DropdownMenuItem(
+                        value: 'CUSTOM',
+                        child: Text('➕ Enter Custom Service Package...', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.primaryBlue)),
+                      ),
+                    ],
+                    onChanged: (val) => setDialogState(() => selectedServiceCode = val ?? 'CHECKUP'),
+                  ),
+                  if (selectedServiceCode == 'CUSTOM') ...[
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: customServiceCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Custom Package Name *',
+                        hintText: 'e.g. Copper Piping Replacement & Nitrogen Testing',
+                        prefixIcon: Icon(Icons.handyman_outlined, color: AppTheme.primaryBlue, size: 20),
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 8),
                   DropdownButtonFormField<String>(
                     value: priority,
                     isExpanded: true,
@@ -188,7 +297,7 @@ class _BookingRequestsViewState extends ConsumerState<BookingRequestsView> {
                     onChanged: (val) => setDialogState(() => priority = val ?? 'MEDIUM'),
                   ),
                   const SizedBox(height: 8),
-                  TextField(controller: complaintCtrl, maxLines: 2, decoration: const InputDecoration(labelText: 'Customer Issue / Complaint *')),
+                  TextField(controller: complaintCtrl, maxLines: 2, decoration: const InputDecoration(labelText: 'Service Description / Customer Issue *')),
                   const SizedBox(height: 8),
                   TextField(controller: brandCtrl, decoration: const InputDecoration(labelText: 'AC Brand (e.g. Daikin)')),
                   const SizedBox(height: 8),
@@ -230,19 +339,27 @@ class _BookingRequestsViewState extends ConsumerState<BookingRequestsView> {
                   ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('Please fill all mandatory fields (*)')));
                   return;
                 }
+                if (selectedServiceCode == 'CUSTOM' && customServiceCtrl.text.trim().isEmpty) {
+                  ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('Please enter custom package name')));
+                  return;
+                }
 
                 try {
+                  final serviceToUse = selectedServiceCode == 'CUSTOM' ? customServiceCtrl.text.trim() : selectedServiceCode;
                   await ref.read(apiRepositoryProvider).createTicket(
                         customerName: nameCtrl.text.trim(),
                         customerPhone: phoneCtrl.text.trim(),
                         addressLine: addrCtrl.text.trim(),
                         area: areaCtrl.text.trim().isNotEmpty ? areaCtrl.text.trim() : 'Chennai Central',
                         pincode: pinCtrl.text.trim(),
-                        serviceTypeId: serviceId,
+                        serviceTypeId: serviceToUse,
                         complaint: complaintCtrl.text.trim(),
                         priority: priority,
                         acBrand: brandCtrl.text.trim(),
                         acType: acType,
+                        latitude: detectedLat,
+                        longitude: detectedLng,
+                        locationLink: locationLinkCtrl.text.trim().isNotEmpty ? locationLinkCtrl.text.trim() : null,
                         preferredDate: dateCtrl.text.trim(),
                         preferredTimeSlot: timeSlot,
                       );
@@ -357,6 +474,140 @@ class _BookingRequestsViewState extends ConsumerState<BookingRequestsView> {
     );
   }
 
+  void _showReassignDialog(BuildContext context, BookingRequestModel req) async {
+    final techs = await ref.read(apiRepositoryProvider).getAllTechnicians();
+    if (!context.mounted) return;
+
+    if (techs.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No active technicians found to reassign to.')),
+      );
+      return;
+    }
+
+    String? selectedTechId = techs.first['id']?.toString();
+    final reasonController = TextEditingController(text: 'Admin reassignment');
+    bool isSubmitting = false;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: Row(
+            children: [
+              const Icon(Icons.swap_horiz_rounded, color: Color(0xFFEA580C)),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text('Reassign: ${req.referenceNumber}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              ),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFF7ED),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: const Color(0xFFFDBA74)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Customer: ${req.customerName} (${req.customerPhone})', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFFC2410C))),
+                      const SizedBox(height: 2),
+                      Text('Address: ${req.address}, ${req.area} (${req.pincode ?? ""})', style: const TextStyle(fontSize: 11, color: Color(0xFF9A3412))),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+                const Text('Select New Technician *', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppTheme.primaryBlue)),
+                const SizedBox(height: 6),
+                DropdownButtonFormField<String>(
+                  value: selectedTechId,
+                  isExpanded: true,
+                  decoration: const InputDecoration(border: OutlineInputBorder(), isDense: true),
+                  items: techs.map((t) {
+                    final name = t['name'] ?? t['user']?['name'] ?? 'Technician';
+                    final phone = t['phone'] ?? t['user']?['phone'] ?? '';
+                    final areas = (t['serviceAreas'] as List?)?.join(', ') ?? '';
+                    return DropdownMenuItem<String>(
+                      value: t['id']?.toString(),
+                      child: Text(
+                        '$name ($phone)${areas.isNotEmpty ? " • $areas" : ""}',
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 13),
+                      ),
+                    );
+                  }).toList(),
+                  onChanged: (val) => setDialogState(() => selectedTechId = val),
+                ),
+                const SizedBox(height: 12),
+                const Text('Reassignment Reason:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                const SizedBox(height: 6),
+                TextField(
+                  controller: reasonController,
+                  decoration: const InputDecoration(
+                    hintText: 'e.g. Current technician unavailable / Emergency schedule adjustment',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFEA580C)),
+              onPressed: (selectedTechId == null || isSubmitting)
+                  ? null
+                  : () async {
+                      setDialogState(() => isSubmitting = true);
+                      try {
+                        final res = await ref.read(apiRepositoryProvider).reassignBookingRequest(
+                              requestId: req.id,
+                              newTechnicianId: selectedTechId!,
+                              reason: reasonController.text.trim(),
+                            );
+                        if (ctx.mounted) Navigator.pop(ctx);
+                        ref.refresh(bookingRequestsProvider(_selectedStatus));
+                        ref.refresh(dashboardStatsProvider);
+                        if (context.mounted) {
+                          final techName = res['newTechnicianName'] ?? 'Technician';
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('✅ Ticket ${req.referenceNumber} successfully reassigned to $techName!'),
+                              backgroundColor: const Color(0xFF16A34A),
+                            ),
+                          );
+                        }
+                      } catch (e) {
+                        setDialogState(() => isSubmitting = false);
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Reassignment failed: $e'),
+                              backgroundColor: Colors.red.shade700,
+                              behavior: SnackBarBehavior.floating,
+                            ),
+                          );
+                        }
+                      }
+                    },
+              child: isSubmitting
+                  ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                  : const Text('Confirm Reassign'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   void _showRejectDialog(BuildContext context, BookingRequestModel req) {
     final reasonController = TextEditingController(text: 'Area out of current coverage zone');
 
@@ -390,6 +641,304 @@ class _BookingRequestsViewState extends ConsumerState<BookingRequestsView> {
             child: const Text('Reject Request'),
           ),
         ],
+      ),
+    );
+  }
+
+  void _showHoldDialog(BuildContext context, BookingRequestModel req) {
+    final reasonController = TextEditingController(text: 'Customer requested reschedule / Waiting for confirmation');
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.pause_circle_filled, color: Color(0xFFD97706)),
+            SizedBox(width: 8),
+            Text('Put Booking On Hold'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Ticket: ${req.referenceNumber} • ${req.customerName}'),
+            const SizedBox(height: 12),
+            const Text('Reason for Hold *:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+            const SizedBox(height: 6),
+            TextField(
+              controller: reasonController,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                hintText: 'e.g. Spare parts in transit, customer out of station...',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFD97706)),
+            onPressed: () async {
+              final reason = reasonController.text.trim();
+              if (reason.isEmpty) return;
+              try {
+                await ref.read(apiRepositoryProvider).putBookingOnHold(
+                      requestId: req.id,
+                      reason: reason,
+                    );
+                if (ctx.mounted) Navigator.pop(ctx);
+                ref.refresh(bookingRequestsProvider(_selectedStatus));
+                ref.refresh(dashboardStatsProvider);
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Booking successfully placed ON HOLD.')),
+                  );
+                }
+              } catch (e) {
+                if (ctx.mounted) {
+                  ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text('Failed: $e'), backgroundColor: Colors.red));
+                }
+              }
+            },
+            child: const Text('Confirm Put On Hold', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showBookingOverview(BuildContext context, BookingRequestModel req) {
+    final isAdmin = ref.read(authStateProvider)?.role == UserRole.admin;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetCtx) => Container(
+        height: MediaQuery.of(sheetCtx).size.height * 0.8,
+        decoration: BoxDecoration(
+          color: Theme.of(context).cardColor,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 16),
+                  decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2)),
+                ),
+              ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(req.referenceNumber, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.primaryBlue)),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          _PriorityBadge(priority: req.priority),
+                          const SizedBox(width: 8),
+                          _StatusBadge(status: req.status),
+                        ],
+                      ),
+                    ],
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.pop(sheetCtx),
+                  ),
+                ],
+              ),
+              const Divider(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF16A34A),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  icon: const Icon(Icons.phone_in_talk, color: Colors.white, size: 22),
+                  label: Text(
+                    'Call Customer (${req.customerPhone})',
+                    style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.white),
+                  ),
+                  onPressed: () async {
+                    final uri = Uri.parse('tel:${req.customerPhone}');
+                    if (await canLaunchUrl(uri)) {
+                      await launchUrl(uri);
+                    }
+                  },
+                ),
+              ),
+              const SizedBox(height: 16),
+              if (req.holdReason != null && req.holdReason!.isNotEmpty)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  margin: const EdgeInsets.only(bottom: 16),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFFBEB),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: const Color(0xFFFDE68A)),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(Icons.pause_circle_filled, color: Color(0xFFD97706), size: 20),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('BOOKING CURRENTLY ON HOLD', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Color(0xFFB45309))),
+                            const SizedBox(height: 2),
+                            Text(req.holdReason!, style: const TextStyle(fontSize: 13, color: Color(0xFF92400E))),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              const Text('Customer & Location', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppTheme.primaryBlue)),
+              const SizedBox(height: 8),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                dense: true,
+                leading: const Icon(Icons.person, color: Color(0xFF64748B)),
+                title: Text(req.customerName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                subtitle: Text('Contact: ${req.customerPhone}'),
+              ),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                dense: true,
+                leading: const Icon(Icons.location_on, color: Color(0xFF64748B)),
+                title: Text('${req.address}, ${req.area}'),
+                subtitle: Text('City/Pincode: ${req.pincode ?? 'Puducherry'}'),
+              ),
+              const Divider(height: 24),
+              const Text('Service & Appliance Details', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppTheme.primaryBlue)),
+              const SizedBox(height: 8),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                dense: true,
+                leading: const Icon(Icons.build_circle, color: Color(0xFF64748B)),
+                title: Text(req.serviceName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                subtitle: Text('Reported Issue: "${req.complaint}"'),
+              ),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                dense: true,
+                leading: const Icon(Icons.ac_unit, color: Color(0xFF64748B)),
+                title: Text('${req.acBrand ?? 'AC'} • ${req.acType ?? 'Split'} (${req.acTonnage ?? 1.5}T)'),
+                subtitle: Text('Scheduled: ${req.preferredDate} (${req.preferredTimeSlot})'),
+              ),
+              const Divider(height: 24),
+              if (req.latitude == null && req.longitude == null) ...[
+                Container(
+                  margin: const EdgeInsets.only(top: 8, bottom: 8),
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFF7ED),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: const Color(0xFFFDBA74)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.location_off_outlined, color: Color(0xFFEA580C), size: 18),
+                      const SizedBox(width: 8),
+                      const Expanded(
+                        child: Text(
+                          'Address not auto-located on map. Add Google Maps link from technician for tracking.',
+                          style: TextStyle(fontSize: 11, color: Color(0xFF9A3412), fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: () {
+                          Navigator.pop(sheetCtx);
+                          _showUpdateTicketLocationDialog(context, req);
+                        },
+                        child: const Text('Add Link', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Color(0xFFEA580C))),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  if (req.status != 'REJECTED' && req.status != 'ON_HOLD')
+                    OutlinedButton.icon(
+                      icon: const Icon(Icons.pause_circle_outline, color: Color(0xFFD97706)),
+                      label: const Text('Put On Hold', style: TextStyle(color: Color(0xFFD97706))),
+                      onPressed: () {
+                        Navigator.pop(sheetCtx);
+                        _showHoldDialog(context, req);
+                      },
+                    ),
+                  OutlinedButton.icon(
+                    icon: const Icon(Icons.edit_outlined),
+                    label: const Text('Edit Details'),
+                    onPressed: () {
+                      Navigator.pop(sheetCtx);
+                      _showEditBookingDialog(context, req);
+                    },
+                  ),
+                  if (isAdmin && (req.status == 'PENDING_APPROVAL' || req.status == 'ON_HOLD'))
+                    ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryBlue),
+                      icon: const Icon(Icons.person_add, color: Colors.white, size: 16),
+                      label: const Text('Assign Field Tech', style: TextStyle(color: Colors.white)),
+                      onPressed: () {
+                        Navigator.pop(sheetCtx);
+                        _showApproveDialog(context, req);
+                      },
+                    ),
+                  if (req.status == 'APPROVED') ...[
+                    if (isAdmin)
+                      ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFEA580C)),
+                        icon: const Icon(Icons.swap_horiz_rounded, color: Colors.white, size: 16),
+                        label: const Text('Reassign Tech', style: TextStyle(color: Colors.white)),
+                        onPressed: () {
+                          Navigator.pop(sheetCtx);
+                          _showReassignDialog(context, req);
+                        },
+                      ),
+                    ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0284C7)),
+                      icon: const Icon(Icons.map_outlined, color: Colors.white, size: 16),
+                      label: const Text('Track Tech', style: TextStyle(color: Colors.white)),
+                      onPressed: () {
+                        Navigator.pop(sheetCtx);
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => TechnicianLiveTrackingScreen(
+                              jobId: req.id,
+                              initialJobNumber: req.referenceNumber,
+                              initialCustomerName: req.customerName,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ],
+                ],
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -560,6 +1109,105 @@ class _BookingRequestsViewState extends ConsumerState<BookingRequestsView> {
       ),
     );
   }
+  void _showUpdateTicketLocationDialog(BuildContext context, BookingRequestModel req) {
+    final linkController = TextEditingController(text: req.locationLink ?? '');
+    bool isSubmitting = false;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: Row(
+            children: const [
+              Icon(Icons.pin_drop, color: Color(0xFFEA580C)),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text('Customer Location Link', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              ),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Ticket: ${req.referenceNumber} (${req.customerName})',
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFFC2410C)),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Address: ${req.address}, ${req.area}',
+                  style: const TextStyle(fontSize: 11, color: Color(0xFF64748B)),
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  'Paste Google Maps location link or coordinates from technician / WhatsApp:',
+                  style: TextStyle(fontSize: 12, color: Color(0xFF475569)),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: linkController,
+                  maxLines: 2,
+                  decoration: const InputDecoration(
+                    hintText: 'e.g. https://maps.app.goo.gl/... or 11.9320, 79.8280',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFEA580C)),
+              onPressed: isSubmitting
+                  ? null
+                  : () async {
+                      final input = linkController.text.trim();
+                      if (input.isEmpty) return;
+                      setDialogState(() => isSubmitting = true);
+                      try {
+                        await ref.read(apiRepositoryProvider).updateBookingRequestCustomerLocation(
+                              requestId: req.id,
+                              locationLink: input,
+                            );
+                        if (ctx.mounted) Navigator.pop(ctx);
+                        ref.refresh(bookingRequestsProvider(_selectedStatus));
+                        ref.refresh(dashboardStatsProvider);
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('📍 Exact customer location saved successfully!'),
+                              backgroundColor: Color(0xFF16A34A),
+                            ),
+                          );
+                        }
+                      } catch (e) {
+                        setDialogState(() => isSubmitting = false);
+                        if (ctx.mounted) {
+                          ScaffoldMessenger.of(ctx).showSnackBar(
+                            SnackBar(
+                              content: Text('Failed to update location: $e'),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
+                        }
+                      }
+                    },
+              child: isSubmitting
+                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                  : const Text('Save & Update', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _FilterChip extends StatelessWidget {
@@ -584,158 +1232,280 @@ class _FilterChip extends StatelessWidget {
 class _RequestCard extends StatelessWidget {
   final BookingRequestModel request;
   final bool isAdmin;
+  final VoidCallback onOverviewPressed;
   final VoidCallback onApprovePressed;
   final VoidCallback onRejectPressed;
   final VoidCallback onProposePressed;
+  final VoidCallback onHoldPressed;
   final VoidCallback onEditPressed;
   final VoidCallback onDeletePressed;
+  final VoidCallback onReassignPressed;
 
   const _RequestCard({
     required this.request,
     required this.isAdmin,
+    required this.onOverviewPressed,
     required this.onApprovePressed,
     required this.onRejectPressed,
     required this.onProposePressed,
+    required this.onHoldPressed,
     required this.onEditPressed,
     required this.onDeletePressed,
+    required this.onReassignPressed,
   });
 
   @override
   Widget build(BuildContext context) {
     final isPending = request.status == 'PENDING_APPROVAL';
+    final isOnHold = request.status == 'ON_HOLD';
 
     return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Wrap(
-                    spacing: 6,
-                    runSpacing: 4,
-                    crossAxisAlignment: WrapCrossAlignment.center,
+      elevation: 1.5,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onOverviewPressed,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: onOverviewPressed,
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Wrap(
+                      spacing: 6,
+                      runSpacing: 4,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        Text(
+                          request.referenceNumber,
+                          style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.primaryBlue, fontSize: 13),
+                        ),
+                        _PriorityBadge(priority: request.priority),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(
-                        request.referenceNumber,
-                        style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.primaryBlue, fontSize: 13),
+                      _StatusBadge(status: request.status),
+                      const SizedBox(width: 4),
+                      IconButton(
+                        icon: const Icon(Icons.phone, size: 18, color: Color(0xFF16A34A)),
+                        tooltip: 'Call Customer',
+                        constraints: const BoxConstraints(),
+                        padding: const EdgeInsets.all(4),
+                        onPressed: () => launchUrl(Uri.parse('tel:${request.customerPhone}')),
                       ),
-                      _PriorityBadge(priority: request.priority),
+                      IconButton(
+                        icon: const Icon(Icons.edit_outlined, size: 18, color: AppTheme.primaryBlue),
+                        tooltip: 'Edit Booking',
+                        constraints: const BoxConstraints(),
+                        padding: const EdgeInsets.all(4),
+                        onPressed: onEditPressed,
+                      ),
+                      if (isAdmin)
+                        IconButton(
+                          icon: const Icon(Icons.delete_outline, size: 18, color: AppTheme.accentRose),
+                          tooltip: 'Delete Booking',
+                          constraints: const BoxConstraints(),
+                          padding: const EdgeInsets.all(4),
+                          onPressed: onDeletePressed,
+                        ),
+                    ],
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(request.customerName, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  ),
+                  InkWell(
+                    onTap: () => launchUrl(Uri.parse('tel:${request.customerPhone}')),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.call, size: 14, color: Color(0xFF16A34A)),
+                        const SizedBox(width: 4),
+                        Text(
+                          request.customerPhone,
+                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF16A34A)),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              Text(request.area, style: const TextStyle(fontSize: 12, color: Color(0xFF64748B))),
+              const SizedBox(height: 6),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(color: const Color(0xFFF1F5F9), borderRadius: BorderRadius.circular(8)),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Service: ${request.serviceName}', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                    Text('Issue: "${request.complaint}"', style: const TextStyle(fontSize: 12, fontStyle: FontStyle.italic)),
+                    Text('AC: ${request.acBrand ?? 'AC'} ${request.acType ?? 'Split'} (${request.acTonnage ?? 1.5}T)', style: const TextStyle(fontSize: 12)),
+                    if (request.isStaffCreated)
+                      const Padding(
+                        padding: EdgeInsets.only(top: 4),
+                        child: Text('Logged by: Staff Support', style: TextStyle(fontSize: 11, color: AppTheme.primaryBlue, fontWeight: FontWeight.w600)),
+                      ),
+                  ],
+                ),
+              ),
+              if (request.holdReason != null && request.holdReason!.isNotEmpty)
+                Container(
+                  width: double.infinity,
+                  margin: const EdgeInsets.only(top: 6),
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFFBEB),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: const Color(0xFFFDE68A)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.pause_circle_filled, size: 15, color: Color(0xFFD97706)),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text('On Hold: ${request.holdReason}', style: const TextStyle(fontSize: 11, color: Color(0xFF92400E), fontWeight: FontWeight.w600)),
+                      ),
                     ],
                   ),
                 ),
-                const SizedBox(width: 4),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    _StatusBadge(status: request.status),
-                    IconButton(
-                      icon: const Icon(Icons.edit_outlined, size: 18, color: AppTheme.primaryBlue),
-                      tooltip: 'Edit Booking',
-                      constraints: const BoxConstraints(),
-                      padding: const EdgeInsets.all(4),
-                      onPressed: onEditPressed,
-                    ),
-                    if (isAdmin)
-                      IconButton(
-                        icon: const Icon(Icons.delete_outline, size: 18, color: AppTheme.accentRose),
-                        tooltip: 'Delete Booking',
-                        constraints: const BoxConstraints(),
-                        padding: const EdgeInsets.all(4),
-                        onPressed: onDeletePressed,
-                      ),
-                  ],
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text(request.customerName, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-            Text('${request.customerPhone} • ${request.area}', style: const TextStyle(fontSize: 12, color: Color(0xFF64748B))),
-            const SizedBox(height: 6),
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(color: const Color(0xFFF1F5F9), borderRadius: BorderRadius.circular(8)),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              const SizedBox(height: 8),
+              Row(
                 children: [
-                  Text('Service: ${request.serviceName}', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
-                  Text('Issue: "${request.complaint}"', style: const TextStyle(fontSize: 12, fontStyle: FontStyle.italic)),
-                  Text('AC: ${request.acBrand ?? 'AC'} ${request.acType ?? 'Split'} (${request.acTonnage ?? 1.5}T)', style: const TextStyle(fontSize: 12)),
-                  if (request.isStaffCreated)
-                    const Padding(
-                      padding: EdgeInsets.only(top: 4),
-                      child: Text('Logged by: Staff Support', style: TextStyle(fontSize: 11, color: AppTheme.primaryBlue, fontWeight: FontWeight.w600)),
+                  const Icon(Icons.access_time, size: 14, color: Color(0xFF64748B)),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Text(
+                      'Scheduled Window: ${request.preferredDate} (${request.preferredTimeSlot})',
+                      style: const TextStyle(fontSize: 12, color: Color(0xFF475569)),
+                      overflow: TextOverflow.ellipsis,
                     ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                const Icon(Icons.access_time, size: 14, color: Color(0xFF64748B)),
-                const SizedBox(width: 4),
-                Expanded(
-                  child: Text(
-                    'Scheduled Window: ${request.preferredDate} (${request.preferredTimeSlot})',
-                    style: const TextStyle(fontSize: 12, color: Color(0xFF475569)),
-                    overflow: TextOverflow.ellipsis,
                   ),
-                ),
-              ],
-            ),
-
-            if (isPending) ...[
-              const Divider(height: 20),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                alignment: WrapAlignment.end,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  if (isAdmin) ...[
-                    OutlinedButton(
-                      onPressed: onProposePressed,
-                      style: OutlinedButton.styleFrom(visualDensity: VisualDensity.compact),
-                      child: const Text('Alt Slot', style: TextStyle(fontSize: 12)),
-                    ),
-                    OutlinedButton(
-                      onPressed: onRejectPressed,
-                      style: OutlinedButton.styleFrom(visualDensity: VisualDensity.compact, foregroundColor: AppTheme.accentRose),
-                      child: const Text('Reject', style: TextStyle(fontSize: 12)),
-                    ),
-                    ElevatedButton.icon(
-                      icon: const Icon(Icons.person_add, size: 14),
-                      onPressed: onApprovePressed,
-                      style: ElevatedButton.styleFrom(visualDensity: VisualDensity.compact, backgroundColor: AppTheme.primaryBlue),
-                      label: const Text('Assign Technician', style: TextStyle(fontSize: 12)),
-                    ),
-                  ] else ...[
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF1F5F9),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: const Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.lock_clock, size: 14, color: Color(0xFF64748B)),
-                          SizedBox(width: 4),
-                          Text('Awaiting Admin Assignment', style: TextStyle(fontSize: 11, color: Color(0xFF64748B), fontWeight: FontWeight.w600)),
-                        ],
-                      ),
-                    ),
-                  ],
                 ],
               ),
+
+              if (isPending || isOnHold) ...[
+                const Divider(height: 20),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  alignment: WrapAlignment.end,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    if (!isOnHold)
+                      OutlinedButton.icon(
+                        onPressed: onHoldPressed,
+                        icon: const Icon(Icons.pause_circle_outline, size: 14, color: Color(0xFFD97706)),
+                        label: const Text('Hold', style: TextStyle(fontSize: 12, color: Color(0xFFD97706))),
+                        style: OutlinedButton.styleFrom(visualDensity: VisualDensity.compact),
+                      ),
+                    if (isAdmin) ...[
+                      OutlinedButton(
+                        onPressed: onProposePressed,
+                        style: OutlinedButton.styleFrom(visualDensity: VisualDensity.compact),
+                        child: const Text('Alt Slot', style: TextStyle(fontSize: 12)),
+                      ),
+                      OutlinedButton(
+                        onPressed: onRejectPressed,
+                        style: OutlinedButton.styleFrom(visualDensity: VisualDensity.compact, foregroundColor: AppTheme.accentRose),
+                        child: const Text('Reject', style: TextStyle(fontSize: 12)),
+                      ),
+                      ElevatedButton.icon(
+                        icon: const Icon(Icons.person_add, size: 14),
+                        onPressed: onApprovePressed,
+                        style: ElevatedButton.styleFrom(visualDensity: VisualDensity.compact, backgroundColor: AppTheme.primaryBlue),
+                        label: Text(isOnHold ? 'Resume & Assign' : 'Assign Technician', style: const TextStyle(fontSize: 12)),
+                      ),
+                    ] else ...[
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF1F5F9),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.lock_clock, size: 14, color: Color(0xFF64748B)),
+                            SizedBox(width: 4),
+                            Text('Awaiting Admin Assignment', style: TextStyle(fontSize: 11, color: Color(0xFF64748B), fontWeight: FontWeight.w600)),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ],
+              if (request.status == 'APPROVED') ...[
+                const Divider(height: 20),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    if (isAdmin) ...[
+                      OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: const Color(0xFFEA580C),
+                          side: const BorderSide(color: Color(0xFFFDBA74)),
+                          visualDensity: VisualDensity.compact,
+                        ),
+                        icon: const Icon(Icons.swap_horiz_rounded, size: 14),
+                        label: const Text('Reassign Tech', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                        onPressed: onReassignPressed,
+                      ),
+                      const SizedBox(width: 8),
+                    ],
+                    OutlinedButton.icon(
+                      onPressed: onHoldPressed,
+                      icon: const Icon(Icons.pause_circle_outline, size: 14, color: Color(0xFFD97706)),
+                      label: const Text('Hold', style: TextStyle(fontSize: 12, color: Color(0xFFD97706))),
+                      style: OutlinedButton.styleFrom(visualDensity: VisualDensity.compact),
+                    ),
+                    const SizedBox(width: 8),
+                    OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: const Color(0xFF0284C7),
+                        side: const BorderSide(color: Color(0xFF38BDF8)),
+                        visualDensity: VisualDensity.compact,
+                      ),
+                      icon: const Icon(Icons.location_searching_rounded, size: 14),
+                      label: const Text('Track Tech on Map', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => TechnicianLiveTrackingScreen(
+                              jobId: request.id,
+                              initialJobNumber: request.referenceNumber,
+                              initialCustomerName: request.customerName,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ],
+                ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
-    );
+    ),
+  );
   }
 }
 
@@ -805,6 +1575,10 @@ class _StatusBadge extends StatelessWidget {
       case 'ALTERNATIVE_PROPOSED':
         bg = Colors.blue.shade100;
         fg = Colors.blue.shade900;
+        break;
+      case 'ON_HOLD':
+        bg = Colors.orange.shade100;
+        fg = Colors.orange.shade900;
         break;
       default:
         bg = Colors.grey.shade200;

@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 
 class AppTheme {
-  // Brand Color Palette (Deep Ice & Professional HVAC Navy)
-  static const Color primaryBlue = Color(0xFF0284C7);      // Sky 600
-  static const Color primaryDark = Color(0xFF0369A1);      // Sky 700
-  static const Color primaryLight = Color(0xFF38BDF8);     // Sky 400
+  // Brand Color Palette (Caring CoolTech Royal Blue & Slate)
+  static const Color primaryBlue = Color(0xFF1E75BB);      // CCT Brand Blue
+  static const Color primaryDark = Color(0xFF155E96);      // Deep Brand Navy
+  static const Color primaryLight = Color(0xFF38BDF8);     // Cool Sky Accent
   static const Color navyBackground = Color(0xFF0F172A);   // Slate 900
   static const Color surfaceCardDark = Color(0xFF1E293B);  // Slate 800
   static const Color cardBorderDark = Color(0xFF334155);   // Slate 700

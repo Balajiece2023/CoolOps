@@ -24,9 +24,10 @@ yarn-error.log*
 lerna-debug.log*
 *.log
 
-# Prisma
+# Prisma & Database
 backend/prisma/*.db
 backend/prisma/*.db-journal
+backend/pgdata/
 
 # Uploads
 backend/uploads/*

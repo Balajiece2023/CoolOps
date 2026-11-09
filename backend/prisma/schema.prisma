@@ -27,6 +27,7 @@ enum RequestStatus {
   REJECTED
   ALTERNATIVE_PROPOSED
   CANCELLED
+  ON_HOLD
 }
 
 enum BookingStatus {
@@ -94,6 +95,7 @@ model User {
   name         String
   role         Role
   phone        String?
+  avatarUrl    String?
   isActive     Boolean      @default(true)
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
@@ -102,6 +104,7 @@ model User {
   auditLogs    AuditLog[]
   createdInvoices Invoice[]
   recordedPayments Payment[]
+  fieldServiceReports FieldServiceReport[]
 
   @@map("users")
 }
@@ -125,6 +128,7 @@ model Technician {
   serviceJobs     ServiceJob[]
   attendances     TechnicianAttendance[]
   locationLogs    TechnicianLocationLog[]
+  fieldServiceReports FieldServiceReport[]
 
   @@map("technicians")
 }
@@ -155,6 +159,9 @@ model CustomerAddress {
   area          String            // e.g. "Adyar", "Anna Nagar"
   city          String            @default("Chennai")
   pincode       String
+  latitude      Float?
+  longitude     Float?
+  locationLink  String?
   isDefault     Boolean           @default(false)
   createdAt     DateTime          @default(now())
   updatedAt     DateTime          @updatedAt
@@ -250,6 +257,9 @@ model BookingRequest {
   acBrand          String?
   acType           String?
   priority         TicketPriority @default(MEDIUM)
+  latitude         Float?
+  longitude        Float?
+  locationLink     String?
   isStaffCreated   Boolean        @default(false)
   createdByStaffId String?
   preferredDate    DateTime       // Stored in UTC (representing slot date)
@@ -257,6 +267,7 @@ model BookingRequest {
   status           RequestStatus  @default(PENDING_APPROVAL)
   isDeleted        Boolean        @default(false)
   rejectionReason  String?
+  holdReason       String?
   proposedDate     DateTime?
   proposedTimeSlot String?
   customerAcceptedProposed Boolean?
@@ -344,6 +355,7 @@ model ServiceJob {
   attachments        JobAttachment[]
   partsConsumed      JobPartConsumed[]
   invoices           Invoice[]
+  fieldServiceReports FieldServiceReport[]
 
   @@map("service_jobs")
 }
@@ -557,7 +569,7 @@ model TechnicianAttendance {
 
   technician       Technician   @relation(fields: [technicianId], references: [id], onDelete: Cascade)
 
-  @@unique([technicianId, date])
+  @@index([technicianId, date])
   @@index([date])
   @@map("technician_attendances")
 }
@@ -573,4 +585,68 @@ model TechnicianLocationLog {
 
   @@index([technicianId, recordedAt])
   @@map("technician_location_logs")
+}
+
+model FieldServiceReport {
+  id                   String        @id @default(uuid())
+  reportNumber         String        @unique // e.g. "1110" or "FSR-1110"
+  serviceJobId         String?
+  technicianId         String?
+  createdById          String
+
+  // Classification checkboxes: COMMISSIONING, WARRANTY, MAIN_CONTACT, DO_AND_CHARGE_REPAIR
+  reportType           String        @default("DO_AND_CHARGE_REPAIR")
+
+  // Customer & Site details
+  customerName         String
+  customerAddress      String
+  contactPhone         String?
+  personCalling        String?
+
+  // Dealer details (printed on sheet)
+  dealerName           String        @default("CARING COOL TECH")
+  dealerAddress        String        @default("Ground Floor No.1 Nethaji Nagar, Vallalarpet, Puducherry - 605 004")
+  dealerPhone          String        @default("96776 86561 / 99766 88166")
+  dealerEmail          String        @default("caringcooltech@gmail.com")
+
+  // Service Engineer & Dates
+  serviceEngineerName  String
+  complaintDate        DateTime?
+  attendingDate        DateTime      @default(now())
+
+  // Equipment & Serial Numbers
+  modelNumber          String?
+  indoorSerialNo       String?
+  outdoorSerialNo      String?
+  errorCode            String?
+
+  // Technical Parameters Grid
+  runningCurrent       String?       // e.g. "14.5 A"
+  suctionPressure      String?       // e.g. "65 PSI"
+  dischargePressure    String?       // e.g. "250 PSI"
+  roomTemperature      String?       // e.g. "22 °C"
+  voltage              String?       // e.g. "230 V" or "415 V 3-Phase"
+  equip1Details        String?
+  equip2Details        String?
+
+  // Observations / Report & Action
+  observations         String        // What was checked / parts changed / run test
+  suggestions          String?       // Suggestion to customer
+
+  // Signatures
+  customerSignName     String?
+  customerSignUrl      String?
+  technicianSignName   String?
+  technicianSignUrl    String?
+
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+
+  serviceJob           ServiceJob?   @relation(fields: [serviceJobId], references: [id], onDelete: SetNull)
+  technician           Technician?   @relation(fields: [technicianId], references: [id], onDelete: SetNull)
+  createdBy            User          @relation(fields: [createdById], references: [id])
+
+  @@index([customerName])
+  @@index([attendingDate])
+  @@map("field_service_reports")
 }

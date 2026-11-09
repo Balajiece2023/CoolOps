@@ -336,3 +336,24 @@ techniciansRouter.get('/live-locations', authorize(Role.ADMIN, Role.BOOKING_STAF
     data: enriched
   });
 });
+
+// 7. Individual Technician Detailed Performance & Timesheet Report (Admin & Staff)
+techniciansRouter.get('/:id/report', authorize(Role.ADMIN, Role.BOOKING_STAFF), async (req: Request, res: Response) => {
+  try {
+    const { getTechnicianReportData } = await import('../services/technicianReportService');
+    const report = await getTechnicianReportData(req.params.id);
+    return res.json({ success: true, data: report });
+  } catch (err: any) {
+    return res.status(404).json({ success: false, error: { code: 'REPORT_NOT_FOUND', message: err.message } });
+  }
+});
+
+// 8. Download Individual Technician Report PDF (Admin & Staff)
+techniciansRouter.get('/:id/report/pdf', authorize(Role.ADMIN, Role.BOOKING_STAFF), async (req: Request, res: Response) => {
+  try {
+    const { generateTechnicianReportPdf } = await import('../services/technicianReportService');
+    await generateTechnicianReportPdf(req.params.id, res);
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: { code: 'PDF_REPORT_FAILED', message: err.message } });
+  }
+});

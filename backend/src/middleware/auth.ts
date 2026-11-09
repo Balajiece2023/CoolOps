@@ -1,33 +1,27 @@
 import { Request, Response, NextFunction } from 'express';
-import jwt from 'jsonwebtoken';
+import * as jwt from 'jsonwebtoken';
 import { config } from '../config';
 import { Role } from '@prisma/client';
+import type { TokenUser } from '../types/auth';
 
-export interface TokenUser {
-  userId: string;
-  email: string;
-  role: Role;
-  technicianId?: string;
-}
-
-declare global {
-  namespace Express {
-    interface Request {
-      user?: TokenUser;
-    }
-  }
-}
+export type { TokenUser };
 
 export function authenticate(req: Request, res: Response, next: NextFunction) {
+  let token: string | undefined;
   const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    token = authHeader.split(' ')[1];
+  } else if (req.query.token && typeof req.query.token === 'string') {
+    token = req.query.token;
+  }
+
+  if (!token) {
     return res.status(401).json({
       success: false,
-      error: { code: 'UNAUTHORIZED', message: 'Missing or invalid Authorization header' }
+      error: { code: 'UNAUTHORIZED', message: 'Missing or invalid Authorization header or token parameter' }
     });
   }
 
-  const token = authHeader.split(' ')[1];
   try {
     const decoded = jwt.verify(token, config.jwt.accessSecret) as TokenUser;
     req.user = decoded;

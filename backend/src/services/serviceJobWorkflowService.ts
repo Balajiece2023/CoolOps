@@ -1,6 +1,7 @@
 import { prisma } from '../prisma';
-import { JobStatus, StockMovementType, InvoiceStatus, PaymentMethod } from '@prisma/client';
+import { JobStatus, StockMovementType, InvoiceStatus, PaymentMethod, AssignmentStatus } from '@prisma/client';
 import { createAuditLog } from './auditService';
+import { otpService } from './otpService';
 
 export class ServiceJobWorkflowService {
   /**
@@ -71,8 +72,8 @@ export class ServiceJobWorkflowService {
       throw new Error('Job is already completed and closed.');
     }
 
-    // Generate random 6-digit OTP
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    // Generate cryptographically secure 6-digit OTP using open-source module
+    const otp = otpService.generateSecureOtp();
     const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 mins validity
     const targetPhone = alternatePhone?.trim() ? alternatePhone.trim() : job.booking.customer.phone;
 
@@ -87,24 +88,22 @@ export class ServiceJobWorkflowService {
       }
     });
 
-    // Queue outbound message to customer via Outbox
-    const customer = job.booking.customer;
-    const msg = `Dear ${customer.name}, technician ${job.technician.user.name} has completed the service for ticket ${job.jobNumber}. If you are satisfied with the service, please share this closure OTP with the technician: *${otp}* (valid for 15 mins).`;
-
-    const { queueOutboxEvent } = await import('./outboxService');
-    await queueOutboxEvent('TICKET_CLOSURE_OTP', {
-      recipientPhone: targetPhone,
-      messageBody: msg,
+    // Dispatch OTP directly to customer mobile number via open-source SMS sender
+    const dispatchResult = await otpService.sendCustomerClosureOtp({
       jobId,
-      otp,
-      jobNumber: job.jobNumber
+      jobNumber: job.jobNumber,
+      customerName: job.booking.customer.name,
+      customerPhone: job.booking.customer.phone,
+      technicianName: job.technician?.user?.name,
+      alternatePhone,
+      otp
     });
 
     await createAuditLog({
       action: 'REQUEST_CLOSURE_OTP',
       entityType: 'ServiceJob',
       entityId: jobId,
-      newValues: { expiresAt }
+      newValues: { expiresAt, targetPhone: dispatchResult.targetPhone, smsSent: dispatchResult.smsSent, provider: dispatchResult.provider }
     });
 
     return {
@@ -112,8 +111,10 @@ export class ServiceJobWorkflowService {
       jobNumber: job.jobNumber,
       status: JobStatus.OTP_PENDING,
       expiresAt,
-      // We expose otp in response for simulator/demo testing environments if needed
-      demoOtp: process.env.NODE_ENV !== 'production' ? otp : undefined
+      targetPhone: dispatchResult.targetPhone,
+      smsSent: dispatchResult.smsSent,
+      provider: dispatchResult.provider,
+      details: dispatchResult.details
     };
   }
 
@@ -169,16 +170,6 @@ export class ServiceJobWorkflowService {
         resolutionNotes: resolutionNotes || job.resolutionNotes,
         closureOtp: null // Clear OTP once consumed
       }
-    });
-
-    // Notify customer on successful closure
-    const { queueOutboxEvent } = await import('./outboxService');
-    const customer = job.booking.customer;
-    await queueOutboxEvent('TICKET_CLOSED', {
-      recipientPhone: customer.phone,
-      messageBody: `Dear ${customer.name}, your service ticket ${job.jobNumber} has been verified and closed successfully. Thank you for choosing FrostPro!`,
-      jobId,
-      jobNumber: job.jobNumber
     });
 
     await createAuditLog({
@@ -345,6 +336,106 @@ export class ServiceJobWorkflowService {
       });
 
       return { payment, invoice: updatedInvoice };
+    });
+  }
+
+  /**
+   * Reassigns an active service job to another technician by Admin
+   */
+  async reassignJob(jobId: string, newTechnicianId: string, adminUserId: string, reason?: string) {
+    return await prisma.$transaction(async (tx) => {
+      const job = await tx.serviceJob.findUnique({
+        where: { id: jobId },
+        include: {
+          technician: { include: { user: true } },
+          booking: {
+            include: {
+              customer: true,
+              assignments: {
+                where: { status: { in: [AssignmentStatus.ASSIGNED, AssignmentStatus.ACCEPTED] } }
+              }
+            }
+          }
+        }
+      });
+
+      if (!job) throw new Error('Service job not found');
+      if (job.status === JobStatus.COMPLETED) {
+        throw new Error('Cannot reassign a completed and closed job');
+      }
+
+      if (job.technicianId === newTechnicianId) {
+        throw new Error('Ticket is already assigned to this technician');
+      }
+
+      const newTech = await tx.technician.findUnique({
+        where: { id: newTechnicianId },
+        include: { user: true }
+      });
+
+      if (!newTech || !newTech.user.isActive) {
+        throw new Error('Selected technician is inactive or does not exist');
+      }
+
+      // 1. Cancel previous active assignments
+      await tx.technicianAssignment.updateMany({
+        where: {
+          bookingId: job.bookingId,
+          status: { in: [AssignmentStatus.ASSIGNED, AssignmentStatus.ACCEPTED] }
+        },
+        data: { status: AssignmentStatus.CANCELLED }
+      });
+
+      // 2. Create new assignment for the new technician
+      const now = new Date();
+      const slotEnd = new Date(now.getTime() + 2 * 60 * 60 * 1000);
+      const newAssignment = await tx.technicianAssignment.create({
+        data: {
+          bookingId: job.bookingId,
+          technicianId: newTechnicianId,
+          assignedSlotStart: now,
+          assignedSlotEnd: slotEnd,
+          status: AssignmentStatus.ASSIGNED,
+          assignedByUserId: adminUserId
+        }
+      });
+
+      // 3. Update the job's assigned technician and reset status to PENDING if previous was en-route/arrived
+      const updatedJob = await tx.serviceJob.update({
+        where: { id: jobId },
+        data: {
+          technicianId: newTechnicianId,
+          status: (job.status === JobStatus.EN_ROUTE || job.status === JobStatus.ARRIVED)
+            ? JobStatus.PENDING
+            : job.status,
+          diagnosis: reason ? `${job.diagnosis || ''} [Reassigned from ${job.technician.user.name}: ${reason}]`.trim() : job.diagnosis
+        },
+        include: {
+          technician: { include: { user: true } },
+          booking: { include: { customer: true, address: true, serviceType: true } }
+        }
+      });
+
+      await createAuditLog({
+        action: 'REASSIGN_JOB_TECHNICIAN',
+        entityType: 'ServiceJob',
+        entityId: jobId,
+        oldValues: { technicianId: job.technicianId, technicianName: job.technician.user.name },
+        newValues: {
+          technicianId: newTechnicianId,
+          technicianName: newTech.user.name,
+          reason,
+          reassignedBy: adminUserId
+        }
+      });
+
+      return {
+        success: true,
+        job: updatedJob,
+        assignment: newAssignment,
+        previousTechnicianName: job.technician.user.name,
+        newTechnicianName: newTech.user.name
+      };
     });
   }
 }

@@ -61,10 +61,30 @@ final invoicesProvider = FutureProvider.autoDispose<List<InvoiceModel>>((ref) as
   return repo.getInvoices();
 });
 
+// Consol Billing Summary Provider
+final consolBillingProvider = FutureProvider.autoDispose<Map<String, dynamic>>((ref) async {
+  final repo = ref.watch(apiRepositoryProvider);
+  return repo.getConsolBillingSummary();
+});
+
+// Expenses Provider
+final expensesProvider = FutureProvider.family.autoDispose<List<Map<String, dynamic>>, String?>((ref, category) async {
+  final repo = ref.watch(apiRepositoryProvider);
+  final res = await repo.getExpenses(category: category);
+  final items = res['items'] as List? ?? [];
+  return List<Map<String, dynamic>>.from(items);
+});
+
 // Technicians List Provider
 final techniciansListProvider = FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
   final repo = ref.watch(apiRepositoryProvider);
   return repo.getTechnicians();
+});
+
+// Field Service Reports Provider
+final fieldServiceReportsProvider = FutureProvider.family.autoDispose<List<FieldServiceReportModel>, String?>((ref, reportType) async {
+  final repo = ref.watch(apiRepositoryProvider);
+  return repo.getFieldServiceReports(reportType: reportType);
 });
 
 // Theme Mode Provider (Light / Dark)

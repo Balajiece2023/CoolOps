@@ -5,7 +5,7 @@ import morgan from 'morgan';
 import rateLimit from 'express-rate-limit';
 import { config } from './config';
 import { authRouter } from './routes/auth';
-import { whatsappWebhookRouter } from './routes/whatsappWebhook';
+import { usersRouter } from './routes/users';
 import { bookingRequestsRouter } from './routes/bookingRequests';
 import { serviceJobsRouter } from './routes/serviceJobs';
 import { billingRouter } from './routes/billing';
@@ -14,8 +14,9 @@ import { dashboardRouter } from './routes/dashboard';
 import { techniciansRouter } from './routes/technicians';
 import { attendanceRouter } from './routes/attendance';
 import { clientsRouter } from './routes/clients';
-import { processOutboxQueue } from './services/outboxService';
-import { metaWhatsAppClient } from './services/metaWhatsAppClient';
+import { fieldServiceReportsRouter } from './routes/fieldServiceReports';
+import { apiDocsRouter } from './routes/apiDocs';
+import { whatsappWebhookRouter } from './routes/whatsappWebhook';
 
 export const app = express();
 
@@ -23,13 +24,14 @@ export const app = express();
 app.use(helmet());
 app.use(cors({ origin: config.corsOrigin, credentials: true }));
 
-// Capture Raw Body for Webhook HMAC Signature Verification
+// Capture Raw Body for Webhook HMAC Signature Verification (with 15MB limit for local photo uploads)
 app.use(express.json({
+  limit: '15mb',
   verify: (req: any, _res, buf) => {
     req.rawBody = buf.toString();
   }
 }));
-app.use(express.urlencoded({ extended: true }));
+app.use(express.urlencoded({ extended: true, limit: '15mb' }));
 
 if (config.env !== 'test') {
   app.use(morgan('dev'));
@@ -89,12 +91,10 @@ app.get('/health', async (_req, res) => {
   });
 });
 
-// WhatsApp Webhook Endpoints
-app.use('/webhooks/whatsapp', whatsappWebhookRouter);
-
 // REST API Routes
 const api = express.Router();
 api.use('/auth', authRouter);
+api.use('/users', usersRouter);
 api.use('/booking-requests', bookingRequestsRouter);
 api.use('/service-jobs', serviceJobsRouter);
 api.use('/billing', billingRouter);
@@ -103,6 +103,15 @@ api.use('/dashboard', dashboardRouter);
 api.use('/technicians', techniciansRouter);
 api.use('/attendance', attendanceRouter);
 api.use('/clients', clientsRouter);
+api.use('/service-reports', fieldServiceReportsRouter);
+
+// Interactive API Testing Console & Documentation
+app.use('/api/docs', apiDocsRouter);
+app.use('/docs', apiDocsRouter);
+app.use('/test-console', apiDocsRouter);
+
+// Webhooks (Meta WhatsApp / External services)
+app.use('/webhooks/whatsapp', whatsappWebhookRouter);
 
 app.use(config.apiPrefix, api);
 
@@ -123,35 +132,8 @@ app.use((err: any, _req: express.Request, res: express.Response, _next: express.
   });
 });
 
-// Background Worker for Transactional Outbox
-let outboxInterval: NodeJS.Timeout | null = null;
-if (config.env !== 'test') {
-  outboxInterval = setInterval(async () => {
-    await processOutboxQueue(async (event) => {
-      if (event.eventType === 'WHATSAPP_SEND_MESSAGE') {
-        const { to, body } = event.payload;
-        const res = await metaWhatsAppClient.sendTextMessage(to, body);
-        return res.success;
-      }
-      if (event.eventType === 'TICKET_CLOSURE_OTP') {
-        const { recipientPhone, messageBody, otp, jobNumber } = event.payload;
-        console.log(`\n======================================================`);
-        console.log(`📲 [REALTIME OTP DISPATCH] -> To: ${recipientPhone}`);
-        console.log(`🔑 Job: ${jobNumber} | OTP: ${otp}`);
-        console.log(`💬 Message: "${messageBody}"`);
-        console.log(`======================================================\n`);
-        const res = await metaWhatsAppClient.sendTextMessage(recipientPhone, messageBody);
-        return res.success;
-      }
-      return true;
-    });
-  }, 5000);
-}
-
 export function startServer() {
   return app.listen(config.port, '0.0.0.0', () => {
-    console.log(`🚀 [FrostPro AC Server] running on http://0.0.0.0:${config.port}${config.apiPrefix}`);
-    console.log(`📱 WhatsApp Webhook ready at: http://0.0.0.0:${config.port}/webhooks/whatsapp`);
-    console.log(`🧪 WhatsApp Simulator available at: POST http://0.0.0.0:${config.port}/webhooks/whatsapp/simulate`);
+    console.log(`🚀 [Caring CoolTech AC Server] running on http://0.0.0.0:${config.port}${config.apiPrefix}`);
   });
 }

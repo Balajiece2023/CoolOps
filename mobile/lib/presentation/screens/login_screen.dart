@@ -21,6 +21,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   bool _isLoading = false;
   String? _errorMessage;
   String _currentServerUrl = AppConstants.defaultApiUrl;
+  bool _showDemoAccounts = false;
 
   @override
   void initState() {
@@ -89,9 +90,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             const SizedBox(height: 12),
             TextField(
               controller: controller,
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 labelText: 'Backend API Endpoint',
-                hintText: 'http://192.168.1.7:4000/api/v1',
+                hintText: AppConstants.lanApiUrl,
               ),
             ),
             const SizedBox(height: 12),
@@ -348,7 +349,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       ),
                       const SizedBox(height: 16),
                       const Text(
-                        'FrostPro AC Operations',
+                        'Caring Cool Tech Operations',
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           fontSize: 22,
@@ -440,40 +441,53 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       ),
                       const SizedBox(height: 24),
 
-                      // Quick role fill demo pills
-                      const Text(
-                        'Demo Quick Logins (1-Tap):',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF64748B)),
+                      // Hidden demo accounts toggle
+                      Center(
+                        child: TextButton.icon(
+                          onPressed: () {
+                            setState(() => _showDemoAccounts = !_showDemoAccounts);
+                          },
+                          icon: Icon(
+                            _showDemoAccounts ? Icons.visibility_off_outlined : Icons.vpn_key_outlined,
+                            size: 14,
+                            color: const Color(0xFF64748B),
+                          ),
+                          label: Text(
+                            _showDemoAccounts ? 'Hide Demo Logins' : 'Show Demo Credentials',
+                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF64748B)),
+                          ),
+                        ),
                       ),
-                      const SizedBox(height: 10),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        alignment: WrapAlignment.center,
-                        children: [
-                          ActionChip(
-                            label: const Text('Admin', style: TextStyle(fontSize: 11)),
-                            avatar: const Icon(Icons.shield, size: 14),
-                            onPressed: () => _fillQuickRole('admin@frostpro.in'),
-                          ),
-                          ActionChip(
-                            label: const Text('Technician', style: TextStyle(fontSize: 11)),
-                            avatar: const Icon(Icons.build, size: 14),
-                            onPressed: () => _fillQuickRole('tech.karthik@frostpro.in'),
-                          ),
-                          ActionChip(
-                            label: const Text('Booking Staff', style: TextStyle(fontSize: 11)),
-                            avatar: const Icon(Icons.phone, size: 14),
-                            onPressed: () => _fillQuickRole('staff@frostpro.in'),
-                          ),
-                          ActionChip(
-                            label: const Text('Accountant', style: TextStyle(fontSize: 11)),
-                            avatar: const Icon(Icons.receipt_long, size: 14),
-                            onPressed: () => _fillQuickRole('accounts@frostpro.in'),
-                          ),
-                        ],
-                      ),
+                      if (_showDemoAccounts) ...[
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          alignment: WrapAlignment.center,
+                          children: [
+                            ActionChip(
+                              label: const Text('Admin', style: TextStyle(fontSize: 11)),
+                              avatar: const Icon(Icons.shield, size: 14),
+                              onPressed: () => _fillQuickRole('admin@frostpro.in'),
+                            ),
+                            ActionChip(
+                              label: const Text('Technician', style: TextStyle(fontSize: 11)),
+                              avatar: const Icon(Icons.build, size: 14),
+                              onPressed: () => _fillQuickRole('tech.karthik@frostpro.in'),
+                            ),
+                            ActionChip(
+                              label: const Text('Booking Staff', style: TextStyle(fontSize: 11)),
+                              avatar: const Icon(Icons.phone, size: 14),
+                              onPressed: () => _fillQuickRole('staff@frostpro.in'),
+                            ),
+                            ActionChip(
+                              label: const Text('Accountant', style: TextStyle(fontSize: 11)),
+                              avatar: const Icon(Icons.receipt_long, size: 14),
+                              onPressed: () => _fillQuickRole('accounts@frostpro.in'),
+                            ),
+                          ],
+                        ),
+                      ],
                       const SizedBox(height: 20),
                       Center(
                         child: TextButton.icon(

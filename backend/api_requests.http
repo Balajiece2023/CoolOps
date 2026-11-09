@@ -1,0 +1,110 @@
+### Caring CoolTech API Test Suite (REST Client for VS Code / Antigravity)
+@baseUrl = http://127.0.0.1:4000/api/v1
+
+### 1. Health Check
+GET http://127.0.0.1:4000/health
+
+### 2. Admin Login
+# @name login
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "admin@frostpro.in",
+  "password": "Demo@1234"
+}
+
+### Store Token from response
+@authToken = {{login.response.body.data.accessToken}}
+
+### 3. Get Current User Profile
+GET {{baseUrl}}/auth/me
+Authorization: Bearer {{authToken}}
+
+### 4. Consolidated Financial Summary (Consol Dashboard)
+GET {{baseUrl}}/billing/consol-summary
+Authorization: Bearer {{authToken}}
+
+### 5. List All Invoices
+GET {{baseUrl}}/billing/invoices
+Authorization: Bearer {{authToken}}
+
+### 6. Create Custom Bill (Matches Sample PDF)
+POST {{baseUrl}}/billing/invoices/custom
+Authorization: Bearer {{authToken}}
+Content-Type: application/json
+
+{
+  "customerName": "SRI VNM JEWELLERS",
+  "customerPhone": "8870825747",
+  "customerAddress": "97-99 KAMARAJ SALAI PUDUCHERRY",
+  "items": [
+    {
+      "description": "Hitachi Cassette ac full water service",
+      "quantity": 8,
+      "unitPrice": 2800
+    },
+    {
+      "description": "Hitachi split ac full water service",
+      "quantity": 3,
+      "unitPrice": 1100
+    }
+  ],
+  "discount": 0,
+  "taxRate": 18.0,
+  "upfrontSettlementAmount": 5000,
+  "paymentMethod": "UPI",
+  "referenceNumber": "UPI-CCT-1001",
+  "notes": "Advance paid via UPI, balance on-hold"
+}
+
+### 7. List Expenses
+GET {{baseUrl}}/billing/expenses
+Authorization: Bearer {{authToken}}
+
+### 8. Log Business Expense
+POST {{baseUrl}}/billing/expenses
+Authorization: Bearer {{authToken}}
+Content-Type: application/json
+
+{
+  "category": "FUEL",
+  "amount": 350,
+  "description": "Petrol for service call in Valarampet"
+}
+
+### 9. List Inventory Stock
+GET {{baseUrl}}/inventory
+Authorization: Bearer {{authToken}}
+
+### 10. Add New Inventory Item
+POST {{baseUrl}}/inventory
+Authorization: Bearer {{authToken}}
+Content-Type: application/json
+
+{
+  "sku": "FAN-CAP-35",
+  "name": "35uF Dual Capacitor",
+  "category": "ELECTRICAL",
+  "unitPrice": 180,
+  "sellingPrice": 380,
+  "currentStock": 30,
+  "minStockAlertLevel": 5,
+  "supplierName": "Chennai AC Spares"
+}
+
+### 11. Attendance Clock-In
+POST {{baseUrl}}/attendance/clock-in
+Authorization: Bearer {{authToken}}
+Content-Type: application/json
+
+{
+  "latitude": 11.935,
+  "longitude": 79.829,
+  "notes": "Morning punch-in"
+}
+
+### 12. Consolidated Timesheet Report
+GET {{baseUrl}}/attendance/report
+Authorization: Bearer {{authToken}}
+

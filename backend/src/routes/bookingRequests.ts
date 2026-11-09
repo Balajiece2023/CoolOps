@@ -4,6 +4,8 @@ import { prisma } from '../prisma';
 import { authenticate, authorize } from '../middleware/auth';
 import { validateBody } from '../middleware/validate';
 import { bookingApprovalService } from '../services/bookingApprovalService';
+import { geocodingService } from '../services/geocodingService';
+import { serviceJobWorkflowService } from '../services/serviceJobWorkflowService';
 import { RequestStatus, Role } from '@prisma/client';
 
 export const bookingRequestsRouter = Router();
@@ -100,6 +102,9 @@ const createTicketSchema = z.object({
   addressLine: z.string().min(3),
   area: z.string().min(2),
   pincode: z.string().min(6),
+  latitude: z.number().optional(),
+  longitude: z.number().optional(),
+  locationLink: z.string().optional(),
   serviceTypeId: z.string().optional(),
   complaint: z.string().min(3),
   priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'EMERGENCY']).default('MEDIUM'),
@@ -117,11 +122,33 @@ bookingRequestsRouter.post('/', authorize(Role.ADMIN, Role.BOOKING_STAFF), valid
 
   try {
     const result = await prisma.$transaction(async (tx) => {
-      // 0. Resolve valid serviceTypeId
+      // 0. Resolve valid serviceTypeId (by id, code, or name)
       let validServiceId = body.serviceTypeId;
       if (validServiceId) {
-        const existing = await tx.serviceType.findUnique({ where: { id: validServiceId } });
-        if (!existing) validServiceId = undefined;
+        const existing = await tx.serviceType.findFirst({
+          where: {
+            OR: [
+              { id: validServiceId },
+              { code: validServiceId.toUpperCase() },
+              { nameEn: { contains: validServiceId, mode: 'insensitive' } }
+            ]
+          }
+        });
+        if (existing) {
+          validServiceId = existing.id;
+        } else {
+          // Create custom service type on the fly if admin specified a custom service name
+          const customCode = validServiceId.substring(0, 15).toUpperCase().replace(/[^A-Z0-9]/g, '_');
+          const newCustomService = await tx.serviceType.create({
+            data: {
+              code: customCode + '_' + Date.now().toString().slice(-4),
+              nameEn: validServiceId,
+              nameTa: validServiceId,
+              basePrice: 699
+            }
+          });
+          validServiceId = newCustomService.id;
+        }
       }
       if (!validServiceId) {
         const firstService = await tx.serviceType.findFirst({ where: { isActive: true } });
@@ -153,13 +180,25 @@ bookingRequestsRouter.post('/', authorize(Role.ADMIN, Role.BOOKING_STAFF), valid
         });
       }
 
-      // 2. Create customer address
+      // 2. Resolve exact coordinates and create customer address
+      const coords = await geocodingService.resolveCoordinates({
+        addressLine: body.addressLine,
+        area: body.area,
+        pincode: body.pincode,
+        latitude: body.latitude,
+        longitude: body.longitude,
+        locationLink: body.locationLink
+      });
+
       const address = await tx.customerAddress.create({
         data: {
           customerId: customer.id,
           addressLine: body.addressLine,
           area: body.area,
-          pincode: body.pincode
+          pincode: body.pincode,
+          latitude: coords ? coords.lat : null,
+          longitude: coords ? coords.lng : null,
+          locationLink: body.locationLink || null
         }
       });
 
@@ -198,6 +237,9 @@ bookingRequestsRouter.post('/', authorize(Role.ADMIN, Role.BOOKING_STAFF), valid
           acType: body.acType,
           acTonnage: body.acTonnage,
           priority: body.priority,
+          latitude: coords ? coords.lat : null,
+          longitude: coords ? coords.lng : null,
+          locationLink: body.locationLink || null,
           isStaffCreated: true,
           createdByStaffId: staffUserId,
           preferredDate: preferredDateUtc,
@@ -212,15 +254,6 @@ bookingRequestsRouter.post('/', authorize(Role.ADMIN, Role.BOOKING_STAFF), valid
       });
 
       return ticket;
-    });
-
-    // Send confirmation message to customer via Outbox
-    const { queueOutboxEvent } = await import('../services/outboxService');
-    await queueOutboxEvent('TICKET_CREATED', {
-      recipientPhone: result.customer.phone,
-      messageBody: `Dear ${result.customer.name}, your service incident ticket ${result.referenceNumber} has been logged. Our dispatch team will assign a technician shortly.`,
-      ticketId: result.id,
-      referenceNumber: result.referenceNumber
     });
 
     return res.status(201).json({
@@ -304,6 +337,39 @@ bookingRequestsRouter.post('/:id/propose-slot', authorize(Role.ADMIN), validateB
 
 const rejectSchema = z.object({
   rejectionReason: z.string().min(5)
+});
+
+const holdSchema = z.object({
+  reason: z.string().min(2)
+});
+
+// Put Booking Request On Hold
+bookingRequestsRouter.post('/:id/hold', authorize(Role.ADMIN, Role.BOOKING_STAFF), validateBody(holdSchema), async (req: Request, res: Response) => {
+  try {
+    const existing = await prisma.bookingRequest.findUnique({ where: { id: req.params.id } });
+    if (!existing) {
+      return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Booking request not found' } });
+    }
+
+    const updated = await prisma.bookingRequest.update({
+      where: { id: req.params.id },
+      data: {
+        status: 'ON_HOLD' as any,
+        holdReason: req.body.reason
+      }
+    });
+
+    return res.json({
+      success: true,
+      message: 'Booking request put on hold successfully',
+      data: updated
+    });
+  } catch (err: any) {
+    return res.status(400).json({
+      success: false,
+      error: { code: 'HOLD_FAILED', message: err.message }
+    });
+  }
 });
 
 // Reject Booking Request
@@ -518,5 +584,122 @@ bookingRequestsRouter.delete('/:id', authorize(Role.ADMIN), async (req: Request,
       error: { code: 'DELETE_FAILED', message: err.message }
     });
   }
+});
+
+const reassignSchema = z.object({
+  newTechnicianId: z.string().min(1, 'New technician ID is required'),
+  reason: z.string().optional()
+});
+
+// Reassign confirmed booking / service job to another technician (Admin & Staff)
+bookingRequestsRouter.post('/:id/reassign', authorize(Role.ADMIN, Role.BOOKING_STAFF), validateBody(reassignSchema), async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { newTechnicianId, reason } = req.body;
+  const adminUserId = req.user!.userId;
+
+  try {
+    const request = await prisma.bookingRequest.findUnique({
+      where: { id },
+      include: {
+        booking: {
+          include: { serviceJob: true }
+        }
+      }
+    });
+
+    if (!request || !request.booking?.serviceJob) {
+      return res.status(404).json({
+        success: false,
+        error: { code: 'NOT_FOUND', message: 'Confirmed booking job not found for this ticket' }
+      });
+    }
+
+    const result = await serviceJobWorkflowService.reassignJob(
+      request.booking.serviceJob.id,
+      newTechnicianId,
+      adminUserId,
+      reason
+    );
+
+    return res.json({
+      success: true,
+      message: `Ticket reassigned from ${result.previousTechnicianName} to ${result.newTechnicianName} successfully.`,
+      data: result
+    });
+  } catch (err: any) {
+    return res.status(400).json({
+      success: false,
+      error: { code: 'REASSIGN_FAILED', message: err.message }
+    });
+  }
+});
+
+// Update customer exact location via Google Maps link or coordinates (Admin, Staff, or Technician)
+bookingRequestsRouter.post('/:id/customer-location', async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { locationLink, latitude, longitude } = req.body;
+
+  let lat: number | null = typeof latitude === 'number' ? latitude : null;
+  let lng: number | null = typeof longitude === 'number' ? longitude : null;
+
+  if ((lat === null || lng === null) && locationLink) {
+    const resolved = await geocodingService.resolveLocationFromLink(locationLink);
+    if (resolved) {
+      lat = resolved.lat;
+      lng = resolved.lng;
+    }
+  }
+
+  if (lat === null || lng === null) {
+    return res.status(400).json({
+      success: false,
+      error: {
+        code: 'INVALID_LOCATION',
+        message: 'Could not extract valid GPS coordinates. Please paste a valid Google Maps link or coordinates (lat, lng).'
+      }
+    });
+  }
+
+  const bReq = await prisma.bookingRequest.findUnique({
+    where: { id },
+    include: { address: true }
+  });
+
+  if (!bReq) {
+    return res.status(404).json({
+      success: false,
+      error: { code: 'NOT_FOUND', message: 'Ticket not found' }
+    });
+  }
+
+  await prisma.bookingRequest.update({
+    where: { id: bReq.id },
+    data: {
+      latitude: lat,
+      longitude: lng,
+      locationLink: locationLink || null
+    }
+  });
+
+  if (bReq.addressId) {
+    await prisma.customerAddress.update({
+      where: { id: bReq.addressId },
+      data: {
+        latitude: lat,
+        longitude: lng,
+        locationLink: locationLink || null
+      }
+    }).catch(() => {});
+  }
+
+  return res.json({
+    success: true,
+    message: 'Ticket customer exact location updated successfully.',
+    data: {
+      latitude: lat,
+      longitude: lng,
+      locationLink: locationLink || null
+    }
+  });
 });
 

@@ -1,0 +1,295 @@
+{
+  "info": {
+    "name": "Caring CoolTech API",
+    "description": "Complete Postman Collection for Caring CoolTech AC Service & HVAC ERP Backend API.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://127.0.0.1:4000/api/v1",
+      "type": "string"
+    },
+    {
+      "key": "jwtToken",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Authentication",
+      "item": [
+        {
+          "name": "Login (Admin)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@frostpro.in\",\n  \"password\": \"Demo@1234\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "login"]
+            }
+          }
+        },
+        {
+          "name": "Get Current Profile (Me)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{jwtToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "me"]
+            }
+          }
+        },
+        {
+          "name": "Forgot Password - Request OTP",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@frostpro.in\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/forgot-password",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "forgot-password"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Billing & Custom Invoices",
+      "item": [
+        {
+          "name": "Consol Financial Dashboard",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{jwtToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/billing/consol-summary",
+              "host": ["{{baseUrl}}"],
+              "path": ["billing", "consol-summary"]
+            }
+          }
+        },
+        {
+          "name": "List Invoices",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{jwtToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/billing/invoices",
+              "host": ["{{baseUrl}}"],
+              "path": ["billing", "invoices"]
+            }
+          }
+        },
+        {
+          "name": "Create Custom Bill",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{jwtToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customerName\": \"SRI VNM JEWELLERS\",\n  \"customerPhone\": \"8870825747\",\n  \"customerAddress\": \"97-99 KAMARAJ SALAI PUDUCHERRY\",\n  \"items\": [\n    {\n      \"description\": \"Hitachi Cassette ac full water service\",\n      \"quantity\": 8,\n      \"unitPrice\": 2800\n    },\n    {\n      \"description\": \"Hitachi split ac full water service\",\n      \"quantity\": 3,\n      \"unitPrice\": 1100\n    }\n  ],\n  \"discount\": 0,\n  \"taxRate\": 18.0,\n  \"upfrontSettlementAmount\": 0,\n  \"paymentMethod\": \"UPI\",\n  \"notes\": \"Direct billing as requested\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/billing/invoices/custom",
+              "host": ["{{baseUrl}}"],
+              "path": ["billing", "invoices", "custom"]
+            }
+          }
+        },
+        {
+          "name": "Record Settlement (Single or Partial)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{jwtToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 15000,\n  \"paymentMethod\": \"BANK_TRANSFER\",\n  \"referenceNumber\": \"NEFT-CCT-8899\",\n  \"notes\": \"Partial settlement received\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/billing/invoices/{{invoiceId}}/settlement",
+              "host": ["{{baseUrl}}"],
+              "path": ["billing", "invoices", "{{invoiceId}}", "settlement"]
+            }
+          }
+        },
+        {
+          "name": "Download Invoice PDF (Tax Invoice)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{jwtToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/billing/invoices/{{invoiceId}}/pdf",
+              "host": ["{{baseUrl}}"],
+              "path": ["billing", "invoices", "{{invoiceId}}", "pdf"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Expense Tracker",
+      "item": [
+        {
+          "name": "List Expenses",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{jwtToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/billing/expenses",
+              "host": ["{{baseUrl}}"],
+              "path": ["billing", "expenses"]
+            }
+          }
+        },
+        {
+          "name": "Log New Expense",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{jwtToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"category\": \"FUEL\",\n  \"amount\": 400,\n  \"description\": \"Petrol for site visit in Reddiarpalayam\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/billing/expenses",
+              "host": ["{{baseUrl}}"],
+              "path": ["billing", "expenses"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Inventory Management",
+      "item": [
+        {
+          "name": "List Inventory Parts",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{jwtToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/inventory",
+              "host": ["{{baseUrl}}"],
+              "path": ["inventory"]
+            }
+          }
+        },
+        {
+          "name": "Add Inventory Item",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{jwtToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sku\": \"CAP-45UF\",\n  \"name\": \"45uF Running Capacitor\",\n  \"category\": \"ELECTRICAL\",\n  \"unitPrice\": 240,\n  \"sellingPrice\": 450,\n  \"currentStock\": 25,\n  \"minStockAlertLevel\": 5,\n  \"supplierName\": \"Puducherry AC Spares\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/inventory",
+              "host": ["{{baseUrl}}"],
+              "path": ["inventory"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. Attendance & Timesheets",
+      "item": [
+        {
+          "name": "Clock-In",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{jwtToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"latitude\": 11.935,\n  \"longitude\": 79.829,\n  \"notes\": \"Morning field duty started\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/attendance/clock-in",
+              "host": ["{{baseUrl}}"],
+              "path": ["attendance", "clock-in"]
+            }
+          }
+        },
+        {
+          "name": "Clock-Out",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{jwtToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"latitude\": 11.935,\n  \"longitude\": 79.829,\n  \"notes\": \"Evening shift ended\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/attendance/clock-out",
+              "host": ["{{baseUrl}}"],
+              "path": ["attendance", "clock-out"]
+            }
+          }
+        },
+        {
+          "name": "Attendance Consolidated Report",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{jwtToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/attendance/report",
+              "host": ["{{baseUrl}}"],
+              "path": ["attendance", "report"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
+

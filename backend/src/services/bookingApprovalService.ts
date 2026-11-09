@@ -1,8 +1,6 @@
 import { prisma } from '../prisma';
 import { BookingStatus, RequestStatus, AssignmentStatus, JobStatus } from '@prisma/client';
-import { queueOutboxEvent } from './outboxService';
 import { createAuditLog } from './auditService';
-import { metaWhatsAppClient } from './metaWhatsAppClient';
 
 export interface ApproveBookingInput {
   bookingRequestId: string;
@@ -149,7 +147,7 @@ export class BookingApprovalService {
           timeSlot: input.timeSlot,
           status: BookingStatus.CONFIRMED,
           totalEstimate: input.estimatedAmount || request.serviceType.basePrice,
-          notes: input.notes
+          notes: input.notes || request.complaint
         }
       });
 
@@ -175,6 +173,7 @@ export class BookingApprovalService {
           bookingId: booking.id,
           technicianId: tech.id,
           acUnitId: request.acUnitId,
+          diagnosis: request.complaint,
           status: JobStatus.PENDING
         }
       });
@@ -198,26 +197,6 @@ export class BookingApprovalService {
           }
         });
       }
-
-      // 10. Queue WhatsApp Confirmation message to Customer via Outbox
-      const notifyMessage = request.customer.language === 'ta'
-        ? `🎉 *உங்கள் AC முன்பதிவு உறுதி செய்யப்பட்டது!*\n\n` +
-          `• முன்பதிவு எண்: *${booking.bookingNumber}*\n` +
-          `• சேவை: ${request.serviceType.nameTa}\n` +
-          `• தேதி & நேரம்: ${input.scheduledDate} (${input.timeSlot})\n` +
-          `• தொழில்நுட்ப வல்லுநர்: ${tech.user.name} (${tech.user.phone || 'FrostPro'})\n\n` +
-          `தொழில்நுட்ப வல்லுநர் வரும் முன் உங்களைத் தொடர்புகொள்வார். நன்றி!`
-        : `🎉 *Your AC Service Booking is Confirmed!*\n\n` +
-          `• Booking ID: *${booking.bookingNumber}*\n` +
-          `• Service: ${request.serviceType.nameEn}\n` +
-          `• Slot: ${input.scheduledDate} (${input.timeSlot})\n` +
-          `• Technician: ${tech.user.name} (${tech.user.phone || 'FrostPro Team'})\n\n` +
-          `Our technician will call you before arriving. Thank you for choosing FrostPro!`;
-
-      await queueOutboxEvent('WHATSAPP_SEND_MESSAGE', {
-        to: request.customer.phone,
-        body: notifyMessage
-      }, tx);
 
       // Audit Log
       await createAuditLog({
@@ -248,19 +227,6 @@ export class BookingApprovalService {
       include: { customer: true }
     });
 
-    const notify = updated.customer.language === 'ta'
-      ? `📅 *மாற்று நேர பரிந்துரை (FrostPro AC Services)*\n\n` +
-        `மன்னிக்கவும், நீங்கள் கோரிய நேரம் கிடைக்கவில்லை. மாற்று நேரமாக *${input.proposedDate} (${input.proposedTimeSlot})* பரிந்துரைக்கிறோம்.\n\n` +
-        `ஏற்றுக்கொள்ள 1 அல்லது ACCEPT என பதிலளிக்கவும்.\nரத்து செய்ய CANCEL என பதிலளிக்கவும்.`
-      : `📅 *Alternative Slot Proposed (FrostPro AC Services)*\n\n` +
-        `We could not accommodate your requested slot. We propose: *${input.proposedDate} (${input.proposedTimeSlot})*.\n\n` +
-        `Reply 1 or ACCEPT to accept this slot.\nReply CANCEL to cancel.`;
-
-    await queueOutboxEvent('WHATSAPP_SEND_MESSAGE', {
-      to: updated.customer.phone,
-      body: notify
-    });
-
     await createAuditLog({
       userId: input.adminUserId,
       action: 'PROPOSE_ALTERNATIVE_SLOT',
@@ -283,15 +249,6 @@ export class BookingApprovalService {
         rejectionReason: input.rejectionReason
       },
       include: { customer: true }
-    });
-
-    const notify = updated.customer.language === 'ta'
-      ? `❌ உங்கள் AC முன்பதிவு கோரிக்கை எண் ${updated.referenceNumber} நிராகரிக்கப்பட்டது.\nகாரணம்: ${input.rejectionReason}\nவேறு சேவைக்கு அழைக்கவும்: +91 98400 12345.`
-      : `❌ Your AC service request ${updated.referenceNumber} could not be accepted.\nReason: ${input.rejectionReason}\nPlease contact us at +91 98400 12345 for assistance.`;
-
-    await queueOutboxEvent('WHATSAPP_SEND_MESSAGE', {
-      to: updated.customer.phone,
-      body: notify
     });
 
     await createAuditLog({

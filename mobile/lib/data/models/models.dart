@@ -26,6 +26,7 @@ class UserModel {
   final String name;
   final UserRole role;
   final String? phone;
+  final String? avatarUrl;
   final String? technicianId;
   final bool isOnline;
   final double? currentLatitude;
@@ -37,11 +38,34 @@ class UserModel {
     required this.name,
     required this.role,
     this.phone,
+    this.avatarUrl,
     this.technicianId,
     this.isOnline = false,
     this.currentLatitude,
     this.currentLongitude,
   });
+
+  UserModel copyWith({
+    String? name,
+    String? phone,
+    String? avatarUrl,
+    bool? isOnline,
+    double? currentLatitude,
+    double? currentLongitude,
+  }) {
+    return UserModel(
+      id: id,
+      email: email,
+      name: name ?? this.name,
+      role: role,
+      phone: phone ?? this.phone,
+      avatarUrl: avatarUrl ?? this.avatarUrl,
+      technicianId: technicianId,
+      isOnline: isOnline ?? this.isOnline,
+      currentLatitude: currentLatitude ?? this.currentLatitude,
+      currentLongitude: currentLongitude ?? this.currentLongitude,
+    );
+  }
 
   factory UserModel.fromJson(Map<String, dynamic> json) {
     final tech = json['technician'] as Map<String, dynamic>?;
@@ -51,6 +75,7 @@ class UserModel {
       name: json['name'] ?? '',
       role: parseUserRole(json['role']),
       phone: json['phone'],
+      avatarUrl: json['avatarUrl'],
       technicianId: json['technicianId'] ?? tech?['id'],
       isOnline: tech?['isOnline'] == true,
       currentLatitude: (tech?['currentLatitude'] as num?)?.toDouble(),
@@ -68,6 +93,7 @@ class BookingRequestModel {
   final String complaint;
   final String address;
   final String area;
+  final String? pincode;
   final String priority;
   final bool isStaffCreated;
   final String? acBrand;
@@ -77,7 +103,11 @@ class BookingRequestModel {
   final String preferredTimeSlot;
   final String status;
   final String? rejectionReason;
+  final String? holdReason;
   final String? proposedSlot;
+  final double? latitude;
+  final double? longitude;
+  final String? locationLink;
 
   BookingRequestModel({
     required this.id,
@@ -88,6 +118,7 @@ class BookingRequestModel {
     required this.complaint,
     required this.address,
     required this.area,
+    this.pincode,
     this.priority = 'MEDIUM',
     this.isStaffCreated = false,
     this.acBrand,
@@ -97,7 +128,11 @@ class BookingRequestModel {
     required this.preferredTimeSlot,
     required this.status,
     this.rejectionReason,
+    this.holdReason,
     this.proposedSlot,
+    this.latitude,
+    this.longitude,
+    this.locationLink,
   });
 
   factory BookingRequestModel.fromJson(Map<String, dynamic> json) {
@@ -114,6 +149,10 @@ class BookingRequestModel {
       complaint: json['complaint'] ?? '',
       address: addressObj['addressLine'] ?? '',
       area: addressObj['area'] ?? '',
+      pincode: addressObj['pincode'],
+      latitude: (addressObj['latitude'] as num?)?.toDouble() ?? (json['latitude'] as num?)?.toDouble(),
+      longitude: (addressObj['longitude'] as num?)?.toDouble() ?? (json['longitude'] as num?)?.toDouble(),
+      locationLink: json['locationLink'] ?? addressObj['locationLink'],
       priority: json['priority'] ?? 'MEDIUM',
       isStaffCreated: json['isStaffCreated'] ?? false,
       acBrand: json['acBrand'],
@@ -123,6 +162,7 @@ class BookingRequestModel {
       preferredTimeSlot: json['preferredTimeSlot'] ?? '',
       status: json['status'] ?? 'PENDING_APPROVAL',
       rejectionReason: json['rejectionReason'],
+      holdReason: json['holdReason'],
       proposedSlot: json['proposedTimeSlot'],
     );
   }
@@ -132,10 +172,13 @@ class ServiceJobModel {
   final String id;
   final String jobNumber;
   final String status;
+  final String? customerId;
   final String customerName;
   final String customerPhone;
+  final String? customerEmail;
   final String address;
   final String serviceName;
+  final String? serviceDescription;
   final String scheduledDate;
   final String timeSlot;
   final bool isOtpVerified;
@@ -144,15 +187,21 @@ class ServiceJobModel {
   final String? notes;
   final List<ChecklistItemModel> checklist;
   final List<JobPartModel> parts;
+  final double? latitude;
+  final double? longitude;
+  final String? locationLink;
 
   ServiceJobModel({
     required this.id,
     required this.jobNumber,
     required this.status,
+    this.customerId,
     required this.customerName,
     required this.customerPhone,
+    this.customerEmail,
     required this.address,
     required this.serviceName,
+    this.serviceDescription,
     required this.scheduledDate,
     required this.timeSlot,
     this.isOtpVerified = false,
@@ -161,6 +210,9 @@ class ServiceJobModel {
     this.notes,
     required this.checklist,
     required this.parts,
+    this.latitude,
+    this.longitude,
+    this.locationLink,
   });
 
   factory ServiceJobModel.fromJson(Map<String, dynamic> json) {
@@ -168,7 +220,12 @@ class ServiceJobModel {
     final customer = booking['customer'] ?? {};
     final addressObj = booking['address'] ?? {};
     final service = booking['serviceType'] ?? {};
+    final bookingReq = booking['bookingRequest'] ?? {};
     final ac = json['acUnit'];
+
+    // Map admin service description & customer requirements
+    final rawDesc = booking['notes'] ?? bookingReq['complaint'] ?? json['diagnosis'] ?? service['description'];
+    final desc = (rawDesc != null && rawDesc.toString().trim().isNotEmpty) ? rawDesc.toString().trim() : null;
 
     final rawChecklist = json['checklistItems'] as List? ?? [];
     final rawParts = json['partsConsumed'] as List? ?? [];
@@ -177,10 +234,13 @@ class ServiceJobModel {
       id: json['id'] ?? '',
       jobNumber: json['jobNumber'] ?? '',
       status: json['status'] ?? 'PENDING',
+      customerId: customer['id'],
       customerName: customer['name'] ?? 'Customer',
       customerPhone: customer['phone'] ?? '',
+      customerEmail: customer['email'],
       address: '${addressObj['addressLine'] ?? ''}, ${addressObj['area'] ?? ''}',
       serviceName: service['nameEn'] ?? 'AC Service',
+      serviceDescription: desc,
       scheduledDate: booking['scheduledDate'] != null ? booking['scheduledDate'].toString().split('T')[0] : '',
       timeSlot: booking['timeSlot'] ?? '',
       isOtpVerified: json['isOtpVerified'] ?? false,
@@ -189,6 +249,9 @@ class ServiceJobModel {
       notes: json['resolutionNotes'],
       checklist: rawChecklist.map((c) => ChecklistItemModel.fromJson(c)).toList(),
       parts: rawParts.map((p) => JobPartModel.fromJson(p)).toList(),
+      latitude: (addressObj['latitude'] as num?)?.toDouble() ?? (bookingReq['latitude'] as num?)?.toDouble(),
+      longitude: (addressObj['longitude'] as num?)?.toDouble() ?? (bookingReq['longitude'] as num?)?.toDouble(),
+      locationLink: addressObj['locationLink'] ?? bookingReq['locationLink'],
     );
   }
 }
@@ -311,4 +374,129 @@ class InvoiceModel {
   }
 
   double get balanceDue => (totalAmount - paidAmount) > 0 ? (totalAmount - paidAmount) : 0;
+  bool get isPaid => status == 'PAID' || balanceDue <= 0.001;
+  bool get isPartiallyPaid => status == 'PARTIALLY_PAID' || (paidAmount > 0 && balanceDue > 0.001);
+  bool get isOnHold => !isPaid && !isPartiallyPaid;
+}
+
+class FieldServiceReportModel {
+  final String id;
+  final String reportNumber;
+  final String? serviceJobId;
+  final String? jobNumber;
+  final String? technicianId;
+  final String reportType;
+  final String customerName;
+  final String customerAddress;
+  final String? contactPhone;
+  final String? personCalling;
+  final String dealerName;
+  final String dealerAddress;
+  final String dealerPhone;
+  final String dealerEmail;
+  final String serviceEngineerName;
+  final String? complaintDate;
+  final String attendingDate;
+  final String? modelNumber;
+  final String? indoorSerialNo;
+  final String? outdoorSerialNo;
+  final String? errorCode;
+  final String? runningCurrent;
+  final String? suctionPressure;
+  final String? dischargePressure;
+  final String? roomTemperature;
+  final String? voltage;
+  final String? equip1Details;
+  final String? equip2Details;
+  final String observations;
+  final String? suggestions;
+  final String? customerSignName;
+  final String createdAt;
+
+  FieldServiceReportModel({
+    required this.id,
+    required this.reportNumber,
+    this.serviceJobId,
+    this.jobNumber,
+    this.technicianId,
+    required this.reportType,
+    required this.customerName,
+    required this.customerAddress,
+    this.contactPhone,
+    this.personCalling,
+    required this.dealerName,
+    required this.dealerAddress,
+    required this.dealerPhone,
+    required this.dealerEmail,
+    required this.serviceEngineerName,
+    this.complaintDate,
+    required this.attendingDate,
+    this.modelNumber,
+    this.indoorSerialNo,
+    this.outdoorSerialNo,
+    this.errorCode,
+    this.runningCurrent,
+    this.suctionPressure,
+    this.dischargePressure,
+    this.roomTemperature,
+    this.voltage,
+    this.equip1Details,
+    this.equip2Details,
+    required this.observations,
+    this.suggestions,
+    this.customerSignName,
+    required this.createdAt,
+  });
+
+  factory FieldServiceReportModel.fromJson(Map<String, dynamic> json) {
+    return FieldServiceReportModel(
+      id: json['id'] ?? '',
+      reportNumber: json['reportNumber'] ?? '',
+      serviceJobId: json['serviceJobId'],
+      jobNumber: json['serviceJob']?['jobNumber'],
+      technicianId: json['technicianId'],
+      reportType: json['reportType'] ?? 'DO_AND_CHARGE_REPAIR',
+      customerName: json['customerName'] ?? '',
+      customerAddress: json['customerAddress'] ?? '',
+      contactPhone: json['contactPhone'],
+      personCalling: json['personCalling'],
+      dealerName: json['dealerName'] ?? 'CARING COOL TECH',
+      dealerAddress: json['dealerAddress'] ?? '',
+      dealerPhone: json['dealerPhone'] ?? '',
+      dealerEmail: json['dealerEmail'] ?? '',
+      serviceEngineerName: json['serviceEngineerName'] ?? '',
+      complaintDate: json['complaintDate'] != null ? json['complaintDate'].toString().split('T')[0] : null,
+      attendingDate: json['attendingDate'] != null ? json['attendingDate'].toString().split('T')[0] : '',
+      modelNumber: json['modelNumber'],
+      indoorSerialNo: json['indoorSerialNo'],
+      outdoorSerialNo: json['outdoorSerialNo'],
+      errorCode: json['errorCode'],
+      runningCurrent: json['runningCurrent'],
+      suctionPressure: json['suctionPressure'],
+      dischargePressure: json['dischargePressure'],
+      roomTemperature: json['roomTemperature'],
+      voltage: json['voltage'],
+      equip1Details: json['equip1Details'],
+      equip2Details: json['equip2Details'],
+      observations: json['observations'] ?? '',
+      suggestions: json['suggestions'],
+      customerSignName: json['customerSignName'],
+      createdAt: json['createdAt'] != null ? json['createdAt'].toString().split('T')[0] : '',
+    );
+  }
+
+  String get reportTypeFormatted {
+    switch (reportType) {
+      case 'COMMISSIONING':
+        return 'Commissioning';
+      case 'WARRANTY':
+        return 'Warranty';
+      case 'MAIN_CONTACT':
+      case 'MAINTENANCE_CONTRACT':
+        return 'Main Contact (AMC)';
+      case 'DO_AND_CHARGE_REPAIR':
+      default:
+        return 'Do & Charge Repair';
+    }
+  }
 }

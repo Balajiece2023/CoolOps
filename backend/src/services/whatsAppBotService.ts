@@ -73,8 +73,8 @@ export class WhatsAppBotService {
 
     // Global Notice: Direct customer booking to Staff Line
     const noticeReply = lang === 'ta'
-      ? 'வணக்கம்! FrostPro AC சேவையின் புதிய முன்பதிவுகள் எங்கள் வாடிக்கையாளர் சேவை நிர்வாகிகளால் மட்டுமே பதிவு செய்யப்படுகின்றன.\n\n📞 முன்பதிவு செய்ய அழைக்கவும்: +91 98400 12345\n\n(உங்கள் முன்பதிவு நிலை மற்றும் OTP அறிவிப்புகள் இந்த வாட்ஸ்அப் எண்ணில் தானாகவே அனுப்பப்படும்).'
-      : 'Hello! Thank you for reaching FrostPro AC Service. New service bookings & incident tickets are now registered exclusively through our staff helpline.\n\n📞 Call our support staff to book: +91 98400 12345\n\n(Active ticket updates, technician ETA, and completion OTPs will be delivered here automatically).';
+      ? 'வணக்கம்! Caring CoolTech AC சேவையின் புதிய முன்பதிவுகள் எங்கள் வாடிக்கையாளர் சேவை நிர்வாகிகளால் மட்டுமே பதிவு செய்யப்படுகின்றன.\n\n📞 முன்பதிவு செய்ய அழைக்கவும்: 9677686561\n\n(உங்கள் முன்பதிவு நிலை மற்றும் OTP அறிவிப்புகள் இந்த வாட்ஸ்அப் எண்ணில் தானாகவே அனுப்பப்படும்).'
+      : 'Hello! Thank you for reaching Caring CoolTech AC Service. New service bookings & incident tickets are now registered exclusively through our staff helpline.\n\n📞 Call our support staff to book: 9677686561\n\n(Active ticket updates, technician ETA, and completion OTPs will be delivered here automatically).';
 
     await this.replyAndLog(conversation.id, waPhone, noticeReply);
     return;

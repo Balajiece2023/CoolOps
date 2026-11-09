@@ -55,6 +55,71 @@ inventoryRouter.post('/', authorize(Role.ADMIN, Role.ACCOUNTANT), validateBody(p
   }
 });
 
+const updatePartSchema = z.object({
+  sku: z.string().min(3).optional(),
+  name: z.string().min(3).optional(),
+  category: z.string().optional(),
+  unitPrice: z.number().positive().optional(),
+  sellingPrice: z.number().positive().optional(),
+  currentStock: z.number().int().nonnegative().optional(),
+  minStockAlertLevel: z.number().int().nonnegative().optional(),
+  supplierName: z.string().optional().nullable()
+});
+
+// Edit inventory part (Admin & Accountant)
+inventoryRouter.put('/:id', authorize(Role.ADMIN, Role.ACCOUNTANT), validateBody(updatePartSchema), async (req: Request, res: Response) => {
+  try {
+    const existing = await prisma.inventoryPart.findUnique({ where: { id: req.params.id } });
+    if (!existing) {
+      return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Inventory part not found' } });
+    }
+
+    const updated = await prisma.inventoryPart.update({
+      where: { id: req.params.id },
+      data: req.body
+    });
+
+    return res.json({ success: true, message: 'Inventory part updated successfully', data: updated });
+  } catch (err: any) {
+    return res.status(400).json({ success: false, error: { code: 'UPDATE_PART_FAILED', message: err.message } });
+  }
+});
+
+// Delete inventory part (Admin only)
+inventoryRouter.delete('/:id', authorize(Role.ADMIN), async (req: Request, res: Response) => {
+  try {
+    const existing = await prisma.inventoryPart.findUnique({
+      where: { id: req.params.id },
+      include: {
+        _count: {
+          select: { consumedInJobs: true, invoiceItems: true }
+        }
+      }
+    });
+
+    if (!existing) {
+      return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Inventory part not found' } });
+    }
+
+    if (existing._count.consumedInJobs > 0 || existing._count.invoiceItems > 0) {
+      // If part has historical links, set currentStock to 0 to prevent breaking ledger
+      await prisma.inventoryPart.update({
+        where: { id: req.params.id },
+        data: { currentStock: 0 }
+      });
+      return res.json({
+        success: true,
+        message: 'Part has historical job references; stock set to 0 (deactivated from operations).'
+      });
+    }
+
+    await prisma.inventoryPart.delete({ where: { id: req.params.id } });
+    return res.json({ success: true, message: 'Inventory part deleted successfully' });
+  } catch (err: any) {
+    return res.status(400).json({ success: false, error: { code: 'DELETE_PART_FAILED', message: err.message } });
+  }
+});
+
 const stockAdjustSchema = z.object({
   quantity: z.number().int(), // positive for inward, negative for outward
   type: z.nativeEnum(StockMovementType),
