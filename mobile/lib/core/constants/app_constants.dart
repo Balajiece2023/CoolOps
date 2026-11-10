@@ -1,10 +1,11 @@
 class AppConstants {
-  // Configurable base URL. Supports Wi-Fi LAN IP (10.94.143.144:4000) and reverse port forwarding (127.0.0.1:4000)
+  // Production Railway backend API URL (default) & local dev fallback presets
+  static const String productionApiUrl = 'https://coolops-production.up.railway.app/api/v1';
   static const String lanHost = '10.94.143.144';
   static const String lanPort = '4000';
   static const String lanApiUrl = 'http://10.94.143.144:4000/api/v1';
   static const String usbApiUrl = 'http://127.0.0.1:4000/api/v1';
-  static const String defaultApiUrl = 'http://10.94.143.144:4000/api/v1';
+  static const String defaultApiUrl = productionApiUrl;
   static const String companyName = 'Caring Cool Tech';
   static const String currencySymbol = '₹';
 

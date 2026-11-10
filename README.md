@@ -80,22 +80,43 @@ A production-oriented Field Service Management & WhatsApp Automation System desi
    ```bash
    npm run dev
    ```
-   Server will run on `http://localhost:4000/api/v1`
+   Local dev server runs on `http://localhost:4000/api/v1`.
+   Production Railway backend runs on `https://coolops-production.up.railway.app/api/v1` (Health: `/health`, API Console: `/docs`).
 
 ---
 
-## 🔑 Demo Login Credentials
+## 🔑 Demo / Seeded Login Credentials
 
-| Role | Email | Password | Permissions & Access Scope |
+> **Note:** Quick demo login buttons and pre-filled credentials have been removed from the mobile app login screen for production security. Use the credentials below after running `npm run prisma:seed` (locally) or `npx --yes tsx prisma/seed.ts` (inside the Railway backend container), and update passwords via **User Management** or **Forgot Password**.
+
+### Primary Staff Accounts
+
+| Role | Name | Email | Password | Permissions & Access Scope |
+| :--- | :--- | :--- | :--- | :--- |
+| **Admin** | Ramesh Sundaram | `admin@frostpro.in` | `Demo@1234` | Full access: All modules, approval, scheduling, technician assignments, billing, inventory, user management |
+| **Booking Staff** | Kavitha Murugan | `staff@frostpro.in` | `Demo@1234` | Manage customers, view booking calendar, inspect pending requests, dispatch & approve requests |
+| **Accountant** | Venkatesh Rao | `accounts@frostpro.in` | `Demo@1234` | Consolidated billing, invoices, settlements, expenses, inventory valuation, PDF invoice downloads |
+
+### Seeded Field Technician Accounts (Password: `Demo@1234`)
+
+| Name | Email | Phone | Assigned Areas |
 | :--- | :--- | :--- | :--- |
-| **Admin** | `admin@frostpro.in` | `Demo@1234` | Full access: All modules, approval, scheduling, technician assignments, billing, inventory |
-| **Technician** | `tech.karthik@frostpro.in` | `Demo@1234` | Assigned jobs only, service checklists, status updates (En-Route, Arrived, In-Progress, Completed), spare parts consumed |
-| **Booking Staff** | `staff@frostpro.in` | `Demo@1234` | Manage customers, view booking calendar, inspect pending requests |
-| **Accountant** | `accounts@frostpro.in` | `Demo@1234` | Invoices, payment records, inventory valuation, PDF invoice downloads |
+| Karthik Raja | `tech.karthik@frostpro.in` | `+919840044001` | Adyar, Besant Nagar, Thiruvanmiyur, OMR |
+| Suresh Kumar | `tech.suresh@frostpro.in` | `+919840044002` | Anna Nagar, Kilpauk, Shenoy Nagar, Mogappair |
+| Saravanan P | `tech.saravanan@frostpro.in` | `+919840044003` | T. Nagar, Nungambakkam, Kodambakkam, Alwarpet |
+| Vijay Anand | `tech.vijay@frostpro.in` | `+919840044004` | Velachery, Madipakkam, Tambaram, Chromepet |
+| Manoj Kumar | `tech.manoj@frostpro.in` | `+919840044005` | Porur, Valasaravakkam, Ramapuram, Guindy |
+| Anbu Selvan | `tech.anbu@frostpro.in` | `+919840044006` | Perambur, Kolathur, Villivakkam |
+| Dinesh Babu | `tech.dinesh@frostpro.in` | `+919840044007` | Sholinganallur, Navalur, Kelambakkam, Siruseri |
+| Pradeep Raj | `tech.pradeep@frostpro.in` | `+919840044008` | Mylapore, Mandaveli, RA Puram, Royapettah |
+| Gopalakrishnan | `tech.gopal@frostpro.in` | `+919840044009` | Pallavaram, Keelkattalai, Medavakkam |
+| Rajesh V | `tech.rajesh@frostpro.in` | `+919840044010` | Egmore, Purasawalkam, George Town |
 
 ---
 
 ## 📱 Mobile App (Flutter)
+
+The mobile app is pre-configured to connect to the live Railway backend at `https://coolops-production.up.railway.app/api/v1`.
 
 1. Open PowerShell and navigate to the mobile folder:
    ```bash
@@ -105,7 +126,11 @@ A production-oriented Field Service Management & WhatsApp Automation System desi
    ```bash
    flutter test
    ```
-3. Run on Chrome (Web) or connected Android device:
+3. Build release Android APK:
+   ```bash
+   flutter build apk --release
+   ```
+4. Or run on Chrome (Web) / connected Android device:
    ```bash
    flutter run -d chrome
    ```

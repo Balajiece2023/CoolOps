@@ -24,6 +24,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen> with TickerProvider
   late Animation<double> _rotYAnimation;
   late Animation<double> _glowAnimation;
   late Animation<double> _fadeAnimation;
+  Timer? _navTimer;
 
   @override
   void initState() {
@@ -62,49 +63,51 @@ class _SplashScreenState extends ConsumerState<SplashScreen> with TickerProvider
 
   @override
   void dispose() {
+    _navTimer?.cancel();
     _animController.dispose();
     super.dispose();
   }
 
-  Future<void> _checkAuthAndNavigate() async {
-    await Future.delayed(const Duration(milliseconds: 2600));
-    if (!mounted) return;
+  void _checkAuthAndNavigate() {
+    _navTimer = Timer(const Duration(milliseconds: 2600), () async {
+      if (!mounted) return;
 
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final token = prefs.getString(AppConstants.keyAccessToken);
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final token = prefs.getString(AppConstants.keyAccessToken);
 
-      if (token != null && token.isNotEmpty) {
-        final repo = ref.read(apiRepositoryProvider);
-        final user = await repo.getMe();
-        ref.read(authStateProvider.notifier).setUser(user);
+        if (token != null && token.isNotEmpty) {
+          final repo = ref.read(apiRepositoryProvider);
+          final user = await repo.getMe();
+          ref.read(authStateProvider.notifier).setUser(user);
 
-        if (mounted) {
-          Navigator.pushReplacement(
-            context,
-            PageRouteBuilder(
-              pageBuilder: (_, __, ___) => const HomeShellScreen(),
-              transitionsBuilder: (_, a, __, c) => FadeTransition(opacity: a, child: c),
-              transitionDuration: const Duration(milliseconds: 600),
-            ),
-          );
-          return;
+          if (mounted) {
+            Navigator.pushReplacement(
+              context,
+              PageRouteBuilder(
+                pageBuilder: (_, __, ___) => const HomeShellScreen(),
+                transitionsBuilder: (_, a, __, c) => FadeTransition(opacity: a, child: c),
+                transitionDuration: const Duration(milliseconds: 600),
+              ),
+            );
+            return;
+          }
         }
+      } catch (_) {
+        // If auto-login fails, land on LoginScreen
       }
-    } catch (_) {
-      // If auto-login fails, land on LoginScreen
-    }
 
-    if (mounted) {
-      Navigator.pushReplacement(
-        context,
-        PageRouteBuilder(
-          pageBuilder: (_, __, ___) => const LoginScreen(),
-          transitionsBuilder: (_, a, __, c) => FadeTransition(opacity: a, child: c),
-          transitionDuration: const Duration(milliseconds: 600),
-        ),
-      );
-    }
+      if (mounted) {
+        Navigator.pushReplacement(
+          context,
+          PageRouteBuilder(
+            pageBuilder: (_, __, ___) => const LoginScreen(),
+            transitionsBuilder: (_, a, __, c) => FadeTransition(opacity: a, child: c),
+            transitionDuration: const Duration(milliseconds: 600),
+          ),
+        );
+      }
+    });
   }
 
   @override

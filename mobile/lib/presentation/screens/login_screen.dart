@@ -16,17 +16,24 @@ class LoginScreen extends ConsumerStatefulWidget {
 }
 
 class _LoginScreenState extends ConsumerState<LoginScreen> {
-  final _emailController = TextEditingController(text: 'admin@frostpro.in');
-  final _passwordController = TextEditingController(text: 'Demo@1234');
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
   bool _isLoading = false;
+  bool _obscurePassword = true;
   String? _errorMessage;
   String _currentServerUrl = AppConstants.defaultApiUrl;
-  bool _showDemoAccounts = false;
 
   @override
   void initState() {
     super.initState();
     _loadSavedServerUrl();
+  }
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadSavedServerUrl() async {
@@ -90,9 +97,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             const SizedBox(height: 12),
             TextField(
               controller: controller,
-              decoration: InputDecoration(
+              decoration: const InputDecoration(
                 labelText: 'Backend API Endpoint',
-                hintText: AppConstants.lanApiUrl,
+                hintText: AppConstants.productionApiUrl,
               ),
             ),
             const SizedBox(height: 12),
@@ -103,12 +110,16 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               runSpacing: 6,
               children: [
                 ActionChip(
-                  label: const Text('Wi-Fi LAN IP (Phone over WiFi)', style: TextStyle(fontSize: 10)),
+                  label: const Text('Production (Railway)', style: TextStyle(fontSize: 10)),
+                  onPressed: () => controller.text = AppConstants.productionApiUrl,
+                ),
+                ActionChip(
+                  label: const Text('Wi-Fi LAN IP', style: TextStyle(fontSize: 10)),
                   onPressed: () => controller.text = AppConstants.lanApiUrl,
                 ),
                 ActionChip(
-                  label: const Text('127.0.0.1 (USB adb reverse)', style: TextStyle(fontSize: 10)),
-                  onPressed: () => controller.text = 'http://127.0.0.1:4000/api/v1',
+                  label: const Text('127.0.0.1 (USB adb)', style: TextStyle(fontSize: 10)),
+                  onPressed: () => controller.text = AppConstants.usbApiUrl,
                 ),
               ],
             ),
@@ -121,7 +132,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               final newUrl = controller.text.trim();
               if (newUrl.isNotEmpty) {
                 final prefs = await SharedPreferences.getInstance();
-                await prefs.setString(AppConstants.keyCustomApiUrl, newUrl);
+                if (newUrl == AppConstants.defaultApiUrl) {
+                  await prefs.remove(AppConstants.keyCustomApiUrl);
+                } else {
+                  await prefs.setString(AppConstants.keyCustomApiUrl, newUrl);
+                }
                 setState(() => _currentServerUrl = newUrl);
                 if (ctx.mounted) Navigator.pop(ctx);
                 if (mounted) {
@@ -138,11 +153,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     );
   }
 
-  void _fillQuickRole(String email) {
-    _emailController.text = email;
-    _passwordController.text = 'Demo@1234';
-  }
-
   void _showForgotPasswordDialog() {
     final emailCtrl = TextEditingController(text: _emailController.text.trim());
     final otpCtrl = TextEditingController();
@@ -151,7 +161,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     bool isSubmitting = false;
     String? dialogError;
     String? successMsg;
-    String? demoOtp;
 
     showDialog(
       context: context,
@@ -202,10 +211,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   ),
                 ] else ...[
                   Text('Verification OTP sent to ${emailCtrl.text.trim()}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                  if (demoOtp != null) ...[
-                    const SizedBox(height: 4),
-                    Text('Demo / Test OTP: $demoOtp', style: const TextStyle(color: Color(0xFF16A34A), fontWeight: FontWeight.bold, fontSize: 12)),
-                  ],
                   const SizedBox(height: 12),
                   TextField(
                     controller: otpCtrl,
@@ -249,11 +254,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           dialogError = null;
                         });
                         try {
-                          final res = await ref.read(apiRepositoryProvider).forgotPassword(email);
-                          final data = res['data'] ?? {};
+                          await ref.read(apiRepositoryProvider).forgotPassword(email);
                           setDlgState(() {
                             otpSent = true;
-                            demoOtp = data['demoOtp']?.toString();
                             successMsg = 'OTP dispatched successfully!';
                           });
                         } catch (e) {
@@ -394,8 +397,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       const SizedBox(height: 6),
                       TextField(
                         controller: _emailController,
+                        keyboardType: TextInputType.emailAddress,
                         decoration: const InputDecoration(
-                          hintText: 'name@frostpro.in',
+                          hintText: 'Enter your email address',
                           prefixIcon: Icon(Icons.email_outlined, size: 20),
                         ),
                       ),
@@ -420,10 +424,17 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       const SizedBox(height: 6),
                       TextField(
                         controller: _passwordController,
-                        obscureText: true,
-                        decoration: const InputDecoration(
+                        obscureText: _obscurePassword,
+                        decoration: InputDecoration(
                           hintText: '••••••••',
-                          prefixIcon: Icon(Icons.lock_outline, size: 20),
+                          prefixIcon: const Icon(Icons.lock_outline, size: 20),
+                          suffixIcon: IconButton(
+                            icon: Icon(
+                              _obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+                              size: 20,
+                            ),
+                            onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                          ),
                         ),
                       ),
                       const SizedBox(height: 24),
@@ -439,55 +450,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                               )
                             : const Text('Sign In to Workspace'),
                       ),
-                      const SizedBox(height: 24),
-
-                      // Hidden demo accounts toggle
-                      Center(
-                        child: TextButton.icon(
-                          onPressed: () {
-                            setState(() => _showDemoAccounts = !_showDemoAccounts);
-                          },
-                          icon: Icon(
-                            _showDemoAccounts ? Icons.visibility_off_outlined : Icons.vpn_key_outlined,
-                            size: 14,
-                            color: const Color(0xFF64748B),
-                          ),
-                          label: Text(
-                            _showDemoAccounts ? 'Hide Demo Logins' : 'Show Demo Credentials',
-                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF64748B)),
-                          ),
-                        ),
-                      ),
-                      if (_showDemoAccounts) ...[
-                        const SizedBox(height: 8),
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          alignment: WrapAlignment.center,
-                          children: [
-                            ActionChip(
-                              label: const Text('Admin', style: TextStyle(fontSize: 11)),
-                              avatar: const Icon(Icons.shield, size: 14),
-                              onPressed: () => _fillQuickRole('admin@frostpro.in'),
-                            ),
-                            ActionChip(
-                              label: const Text('Technician', style: TextStyle(fontSize: 11)),
-                              avatar: const Icon(Icons.build, size: 14),
-                              onPressed: () => _fillQuickRole('tech.karthik@frostpro.in'),
-                            ),
-                            ActionChip(
-                              label: const Text('Booking Staff', style: TextStyle(fontSize: 11)),
-                              avatar: const Icon(Icons.phone, size: 14),
-                              onPressed: () => _fillQuickRole('staff@frostpro.in'),
-                            ),
-                            ActionChip(
-                              label: const Text('Accountant', style: TextStyle(fontSize: 11)),
-                              avatar: const Icon(Icons.receipt_long, size: 14),
-                              onPressed: () => _fillQuickRole('accounts@frostpro.in'),
-                            ),
-                          ],
-                        ),
-                      ],
                       const SizedBox(height: 20),
                       Center(
                         child: TextButton.icon(
