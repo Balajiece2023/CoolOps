@@ -14,7 +14,7 @@ RUN npm ci
 COPY src ./src
 COPY assets ./assets
 RUN npx prisma generate
-RUN npm run build
+RUN npm run build && test -f dist/src/index.js
 
 FROM node:20-alpine AS runner
 
@@ -41,4 +41,4 @@ RUN mkdir -p ./node_modules/.bin ./uploads && ln -sf ../prisma/build/index.js ./
 
 EXPOSE 4000
 
-CMD ["sh", "-c", "ls -la prisma/migrations prisma/migrations/* && node ./node_modules/prisma/build/index.js migrate deploy && node dist/src/index.js"]
+CMD ["sh", "-c", "node ./node_modules/prisma/build/index.js migrate deploy && node dist/src/index.js"]
