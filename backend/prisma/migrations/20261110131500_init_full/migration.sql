@@ -2,7 +2,10 @@
 CREATE TYPE "Role" AS ENUM ('ADMIN', 'BOOKING_STAFF', 'TECHNICIAN', 'ACCOUNTANT');
 
 -- CreateEnum
-CREATE TYPE "RequestStatus" AS ENUM ('PENDING_APPROVAL', 'APPROVED', 'REJECTED', 'ALTERNATIVE_PROPOSED', 'CANCELLED');
+CREATE TYPE "TicketPriority" AS ENUM ('LOW', 'MEDIUM', 'HIGH', 'EMERGENCY');
+
+-- CreateEnum
+CREATE TYPE "RequestStatus" AS ENUM ('PENDING_APPROVAL', 'APPROVED', 'REJECTED', 'ALTERNATIVE_PROPOSED', 'CANCELLED', 'ON_HOLD');
 
 -- CreateEnum
 CREATE TYPE "BookingStatus" AS ENUM ('CONFIRMED', 'CANCELLED', 'COMPLETED');
@@ -11,7 +14,7 @@ CREATE TYPE "BookingStatus" AS ENUM ('CONFIRMED', 'CANCELLED', 'COMPLETED');
 CREATE TYPE "AssignmentStatus" AS ENUM ('ASSIGNED', 'ACCEPTED', 'DECLINED', 'CANCELLED');
 
 -- CreateEnum
-CREATE TYPE "JobStatus" AS ENUM ('PENDING', 'EN_ROUTE', 'ARRIVED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED');
+CREATE TYPE "JobStatus" AS ENUM ('PENDING', 'EN_ROUTE', 'ARRIVED', 'IN_PROGRESS', 'OTP_PENDING', 'COMPLETED', 'CANCELLED');
 
 -- CreateEnum
 CREATE TYPE "StockMovementType" AS ENUM ('INWARD', 'OUTWARD_JOB', 'ADJUSTMENT', 'RETURN');
@@ -36,6 +39,7 @@ CREATE TABLE "users" (
     "name" TEXT NOT NULL,
     "role" "Role" NOT NULL,
     "phone" TEXT,
+    "avatarUrl" TEXT,
     "isActive" BOOLEAN NOT NULL DEFAULT true,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
@@ -51,6 +55,10 @@ CREATE TABLE "technicians" (
     "serviceAreas" TEXT[],
     "maxDailyJobs" INTEGER NOT NULL DEFAULT 4,
     "isAvailable" BOOLEAN NOT NULL DEFAULT true,
+    "isOnline" BOOLEAN NOT NULL DEFAULT false,
+    "currentLatitude" DOUBLE PRECISION,
+    "currentLongitude" DOUBLE PRECISION,
+    "lastLocationAt" TIMESTAMP(3),
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -79,6 +87,9 @@ CREATE TABLE "customer_addresses" (
     "area" TEXT NOT NULL,
     "city" TEXT NOT NULL DEFAULT 'Chennai',
     "pincode" TEXT NOT NULL,
+    "latitude" DOUBLE PRECISION,
+    "longitude" DOUBLE PRECISION,
+    "locationLink" TEXT,
     "isDefault" BOOLEAN NOT NULL DEFAULT false,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
@@ -160,10 +171,18 @@ CREATE TABLE "booking_requests" (
     "acTonnage" DOUBLE PRECISION,
     "acBrand" TEXT,
     "acType" TEXT,
+    "priority" "TicketPriority" NOT NULL DEFAULT 'MEDIUM',
+    "latitude" DOUBLE PRECISION,
+    "longitude" DOUBLE PRECISION,
+    "locationLink" TEXT,
+    "isStaffCreated" BOOLEAN NOT NULL DEFAULT false,
+    "createdByStaffId" TEXT,
     "preferredDate" TIMESTAMP(3) NOT NULL,
     "preferredTimeSlot" TEXT NOT NULL,
     "status" "RequestStatus" NOT NULL DEFAULT 'PENDING_APPROVAL',
+    "isDeleted" BOOLEAN NOT NULL DEFAULT false,
     "rejectionReason" TEXT,
+    "holdReason" TEXT,
     "proposedDate" TIMESTAMP(3),
     "proposedTimeSlot" TEXT,
     "customerAcceptedProposed" BOOLEAN,
@@ -216,6 +235,11 @@ CREATE TABLE "service_jobs" (
     "status" "JobStatus" NOT NULL DEFAULT 'PENDING',
     "diagnosis" TEXT,
     "resolutionNotes" TEXT,
+    "closureOtp" TEXT,
+    "closureOtpExpiresAt" TIMESTAMP(3),
+    "alternateOtpPhone" TEXT,
+    "isOtpVerified" BOOLEAN NOT NULL DEFAULT false,
+    "otpAttempts" INTEGER NOT NULL DEFAULT 0,
     "startedAt" TIMESTAMP(3),
     "enRouteAt" TIMESTAMP(3),
     "arrivedAt" TIMESTAMP(3),
@@ -401,6 +425,78 @@ CREATE TABLE "audit_logs" (
     CONSTRAINT "audit_logs_pkey" PRIMARY KEY ("id")
 );
 
+-- CreateTable
+CREATE TABLE "technician_attendances" (
+    "id" TEXT NOT NULL,
+    "technicianId" TEXT NOT NULL,
+    "date" TIMESTAMP(3) NOT NULL,
+    "clockInAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "clockOutAt" TIMESTAMP(3),
+    "clockInLatitude" DOUBLE PRECISION,
+    "clockInLongitude" DOUBLE PRECISION,
+    "clockOutLatitude" DOUBLE PRECISION,
+    "clockOutLongitude" DOUBLE PRECISION,
+    "totalMinutes" INTEGER DEFAULT 0,
+    "notes" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "technician_attendances_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "technician_location_logs" (
+    "id" TEXT NOT NULL,
+    "technicianId" TEXT NOT NULL,
+    "latitude" DOUBLE PRECISION NOT NULL,
+    "longitude" DOUBLE PRECISION NOT NULL,
+    "recordedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "technician_location_logs_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "field_service_reports" (
+    "id" TEXT NOT NULL,
+    "reportNumber" TEXT NOT NULL,
+    "serviceJobId" TEXT,
+    "technicianId" TEXT,
+    "createdById" TEXT NOT NULL,
+    "reportType" TEXT NOT NULL DEFAULT 'DO_AND_CHARGE_REPAIR',
+    "customerName" TEXT NOT NULL,
+    "customerAddress" TEXT NOT NULL,
+    "contactPhone" TEXT,
+    "personCalling" TEXT,
+    "dealerName" TEXT NOT NULL DEFAULT 'CARING COOL TECH',
+    "dealerAddress" TEXT NOT NULL DEFAULT 'Ground Floor No.1 Nethaji Nagar, Vallalarpet, Puducherry - 605 004',
+    "dealerPhone" TEXT NOT NULL DEFAULT '96776 86561 / 99766 88166',
+    "dealerEmail" TEXT NOT NULL DEFAULT 'caringcooltech@gmail.com',
+    "serviceEngineerName" TEXT NOT NULL,
+    "complaintDate" TIMESTAMP(3),
+    "attendingDate" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "modelNumber" TEXT,
+    "indoorSerialNo" TEXT,
+    "outdoorSerialNo" TEXT,
+    "errorCode" TEXT,
+    "runningCurrent" TEXT,
+    "suctionPressure" TEXT,
+    "dischargePressure" TEXT,
+    "roomTemperature" TEXT,
+    "voltage" TEXT,
+    "equip1Details" TEXT,
+    "equip2Details" TEXT,
+    "observations" TEXT NOT NULL,
+    "suggestions" TEXT,
+    "customerSignName" TEXT,
+    "customerSignUrl" TEXT,
+    "technicianSignName" TEXT,
+    "technicianSignUrl" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "field_service_reports_pkey" PRIMARY KEY ("id")
+);
+
 -- CreateIndex
 CREATE UNIQUE INDEX "users_email_key" ON "users"("email");
 
@@ -427,6 +523,9 @@ CREATE UNIQUE INDEX "booking_requests_referenceNumber_key" ON "booking_requests"
 
 -- CreateIndex
 CREATE INDEX "booking_requests_status_idx" ON "booking_requests"("status");
+
+-- CreateIndex
+CREATE INDEX "booking_requests_isDeleted_idx" ON "booking_requests"("isDeleted");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "bookings_bookingNumber_key" ON "bookings"("bookingNumber");
@@ -457,6 +556,24 @@ CREATE INDEX "outbox_events_status_idx" ON "outbox_events"("status");
 
 -- CreateIndex
 CREATE INDEX "audit_logs_entityType_entityId_idx" ON "audit_logs"("entityType", "entityId");
+
+-- CreateIndex
+CREATE INDEX "technician_attendances_technicianId_date_idx" ON "technician_attendances"("technicianId", "date");
+
+-- CreateIndex
+CREATE INDEX "technician_attendances_date_idx" ON "technician_attendances"("date");
+
+-- CreateIndex
+CREATE INDEX "technician_location_logs_technicianId_recordedAt_idx" ON "technician_location_logs"("technicianId", "recordedAt");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "field_service_reports_reportNumber_key" ON "field_service_reports"("reportNumber");
+
+-- CreateIndex
+CREATE INDEX "field_service_reports_customerName_idx" ON "field_service_reports"("customerName");
+
+-- CreateIndex
+CREATE INDEX "field_service_reports_attendingDate_idx" ON "field_service_reports"("attendingDate");
 
 -- AddForeignKey
 ALTER TABLE "technicians" ADD CONSTRAINT "technicians_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
@@ -550,4 +667,19 @@ ALTER TABLE "payments" ADD CONSTRAINT "payments_receivedById_fkey" FOREIGN KEY (
 
 -- AddForeignKey
 ALTER TABLE "audit_logs" ADD CONSTRAINT "audit_logs_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "technician_attendances" ADD CONSTRAINT "technician_attendances_technicianId_fkey" FOREIGN KEY ("technicianId") REFERENCES "technicians"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "technician_location_logs" ADD CONSTRAINT "technician_location_logs_technicianId_fkey" FOREIGN KEY ("technicianId") REFERENCES "technicians"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "field_service_reports" ADD CONSTRAINT "field_service_reports_serviceJobId_fkey" FOREIGN KEY ("serviceJobId") REFERENCES "service_jobs"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "field_service_reports" ADD CONSTRAINT "field_service_reports_technicianId_fkey" FOREIGN KEY ("technicianId") REFERENCES "technicians"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "field_service_reports" ADD CONSTRAINT "field_service_reports_createdById_fkey" FOREIGN KEY ("createdById") REFERENCES "users"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
