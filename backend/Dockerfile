@@ -9,6 +9,7 @@ COPY prisma ./prisma/
 RUN npm ci
 
 COPY src ./src
+COPY assets ./assets
 RUN npx prisma generate
 RUN npm run build
 
@@ -25,7 +26,8 @@ RUN npm ci --only=production
 RUN npx prisma generate
 
 COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/assets ./assets
 
 EXPOSE 4000
 
-CMD ["node", "dist/index.js"]
+CMD ["node", "dist/src/index.js"]
