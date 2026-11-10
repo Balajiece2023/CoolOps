@@ -9,8 +9,8 @@
 
 2. **Add the Backend Service**:
    - In the same Railway project, click **+ New** -> **GitHub Repo** (or deploy via Railway CLI).
-   - Point the root directory to `/backend` (if repo root is not `backend`).
-   - Railway will auto-detect [`railway.toml`](file:///e:/ACService/backend/railway.toml) and build using `npm run build`.
+   - Set **Root Directory** to `/backend` in Service **Settings** -> **Source**.
+   - Railway will detect [`railway.toml`](file:///e:/ACService/backend/railway.toml) and [`Dockerfile`](file:///e:/ACService/backend/Dockerfile), install OpenSSL 3 for Prisma (`linux-musl-openssl-3.0.x`), build TypeScript (`npm run build`), and apply database migrations automatically on startup.
 
 3. **Configure Environment Variables**:
    In your Railway backend service settings (**Variables** tab), configure:
@@ -19,7 +19,6 @@
    |---|---|
    | `DATABASE_URL` | `${{Postgres.DATABASE_URL}}` (Reference your Railway Postgres service) |
    | `NODE_ENV` | `production` |
-   | `PORT` | `4000` (or leave default, Railway assigns dynamically and passes via `$PORT`) |
    | `API_PREFIX` | `/api/v1` |
    | `CORS_ORIGIN` | `*` (or your frontend app domain) |
    | `JWT_ACCESS_SECRET` | Generate a strong 64-char random string |
@@ -42,16 +41,16 @@
    | `SMS_GATEWAY_API_KEY` | `osk_FEwEv_6iV8Q56CxtmtbJ-5DI-Nf7zYpoc9P_FkaWnGk` |
    | `SMS_SENDER_ID` | `COOLTC` |
 
+   *(Leave `PORT` unset unless your Railway Networking Target Port is explicitly set to `4000`; Railway injects `PORT` dynamically and the server binds to `process.env.PORT || 4000`.)*
+
 4. **Database Migration & Seeding**:
-   - `railway.toml` is configured to run `npx prisma migrate deploy` automatically before starting the server.
-   - To seed initial data (services, admin accounts):
-     Open the Railway CLI or Service Console and execute:
+   - `Dockerfile` and `railway.toml` run `prisma migrate deploy` automatically before starting the server.
+   - To seed initial demo/admin users and service types once deployed, run inside the Railway service shell/SSH (or locally targeting the public `DATABASE_URL`):
      ```bash
-     npm run prisma:seed
+     npx --yes tsx prisma/seed.ts
      ```
 
 5. **Generate Public Domain**:
-   - Go to Backend Service -> **Settings** -> **Networking** -> **Generate Domain**.
-   - You'll get your public live URL, e.g. `https://acservice-backend-production.up.railway.app`.
-   - Update your Flutter mobile app `apiBaseUrl` with this Railway URL!
-
+   - Go to Backend Service -> **Settings** -> **Networking** -> **Generate Domain** (target port `4000` if `PORT` is unset or matches `$PORT`).
+   - Verify health at `https://<your-domain>.up.railway.app/health` and interactive API console at `https://<your-domain>.up.railway.app/docs`.
+   - Update your Flutter mobile app base URL with `https://<your-domain>.up.railway.app/api/v1`.

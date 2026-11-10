@@ -20,6 +20,9 @@ import { whatsappWebhookRouter } from './routes/whatsappWebhook';
 
 export const app = express();
 
+// Trust Railway / reverse proxy X-Forwarded-* headers for accurate rate limiting and IP detection
+app.set('trust proxy', 1);
+
 // Security Middlewares
 app.use(helmet());
 app.use(cors({ origin: config.corsOrigin, credentials: true }));
@@ -115,6 +118,18 @@ app.use('/webhooks/whatsapp', whatsappWebhookRouter);
 
 app.use(config.apiPrefix, api);
 
+// Root endpoint
+app.get('/', (_req, res) => {
+  res.json({
+    success: true,
+    service: config.business.name,
+    status: 'running',
+    apiPrefix: config.apiPrefix,
+    health: '/health',
+    docs: '/docs'
+  });
+});
+
 // 404 handler
 app.use((_req, res) => {
   res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Endpoint not found' } });
@@ -133,7 +148,23 @@ app.use((err: any, _req: express.Request, res: express.Response, _next: express.
 });
 
 export function startServer() {
-  return app.listen(config.port, '0.0.0.0', () => {
+  const server = app.listen(config.port, '0.0.0.0', () => {
     console.log(`🚀 [Caring CoolTech AC Server] running on http://0.0.0.0:${config.port}${config.apiPrefix}`);
   });
+
+  const shutdown = async (signal: string) => {
+    console.log(`[Server] Received ${signal}, shutting down gracefully...`);
+    server.close(async () => {
+      try {
+        const { prisma } = await import('./prisma');
+        await prisma.$disconnect();
+      } catch (_) {}
+      process.exit(0);
+    });
+  };
+
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
+
+  return server;
 }
