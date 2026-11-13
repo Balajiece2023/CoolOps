@@ -6,6 +6,7 @@ import { validateBody } from '../middleware/validate';
 import { bookingApprovalService } from '../services/bookingApprovalService';
 import { geocodingService } from '../services/geocodingService';
 import { serviceJobWorkflowService } from '../services/serviceJobWorkflowService';
+import { smsService } from '../services/smsService';
 import { RequestStatus, Role } from '@prisma/client';
 
 export const bookingRequestsRouter = Router();
@@ -115,8 +116,8 @@ const createTicketSchema = z.object({
   preferredTimeSlot: z.string() // e.g. "09:00-11:00"
 });
 
-// Create new Incident Ticket / Booking Request (Staff & Admin only)
-bookingRequestsRouter.post('/', authorize(Role.ADMIN, Role.BOOKING_STAFF), validateBody(createTicketSchema), async (req: Request, res: Response) => {
+// Create new Incident Ticket / Booking Request (Staff, Admin & Technicians)
+bookingRequestsRouter.post('/', authorize(Role.ADMIN, Role.BOOKING_STAFF, Role.TECHNICIAN), validateBody(createTicketSchema), async (req: Request, res: Response) => {
   const body = req.body;
   const staffUserId = req.user!.userId;
 
@@ -255,6 +256,16 @@ bookingRequestsRouter.post('/', authorize(Role.ADMIN, Role.BOOKING_STAFF), valid
 
       return ticket;
     });
+
+    // Dispatch Booking Created SMS to customer (asynchronous, non-blocking)
+    smsService.sendBookingCreatedSms({
+      customerName: result.customer?.name || body.customerName,
+      customerPhone: result.customer?.phone || body.customerPhone,
+      referenceNumber: result.referenceNumber,
+      scheduledDate: result.preferredDate,
+      timeSlot: result.preferredTimeSlot,
+      serviceName: result.serviceType?.nameEn
+    }).catch(err => console.error('❌ [BOOKING-CREATED-SMS-ERROR]', err));
 
     return res.status(201).json({
       success: true,

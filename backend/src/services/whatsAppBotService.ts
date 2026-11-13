@@ -1,6 +1,7 @@
 import { prisma } from '../prisma';
 import { metaWhatsAppClient } from './metaWhatsAppClient';
 import { queueOutboxEvent } from './outboxService';
+import { smsService } from './smsService';
 import { RequestStatus } from '@prisma/client';
 
 export type ConversationStep =
@@ -96,7 +97,7 @@ export class WhatsAppBotService {
   }
 
   private async saveBookingRequest(waPhone: string, session: SessionData) {
-    return await prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx) => {
       // 1. Find or create Customer
       let customer = await tx.customer.findUnique({ where: { phone: waPhone } });
       if (!customer) {
@@ -168,8 +169,20 @@ export class WhatsAppBotService {
         service: session.serviceTypeName
       }, tx);
 
-      return bookingRequest;
+      return { bookingRequest, customer };
     });
+
+    // Send Booking Created SMS to customer via OpenSMS
+    smsService.sendBookingCreatedSms({
+      customerName: result.customer.name,
+      customerPhone: result.customer.phone,
+      referenceNumber: result.bookingRequest.referenceNumber,
+      scheduledDate: result.bookingRequest.preferredDate,
+      timeSlot: result.bookingRequest.preferredTimeSlot,
+      serviceName: session.serviceTypeName
+    }).catch(err => console.error('❌ [WHATSAPP-BOOKING-SMS-ERROR]', err));
+
+    return result.bookingRequest;
   }
 
   private async transition(waPhone: string, step: ConversationStep, sessionData: SessionData) {

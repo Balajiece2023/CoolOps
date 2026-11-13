@@ -1,6 +1,7 @@
 import { prisma } from '../prisma';
 import { BookingStatus, RequestStatus, AssignmentStatus, JobStatus } from '@prisma/client';
 import { createAuditLog } from './auditService';
+import { smsService } from './smsService';
 
 export interface ApproveBookingInput {
   bookingRequestId: string;
@@ -52,7 +53,7 @@ export class BookingApprovalService {
   async approveBookingRequest(input: ApproveBookingInput) {
     const { start, end } = BookingApprovalService.parseSlotDateRange(input.scheduledDate, input.timeSlot);
 
-    return await prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx) => {
       // 1. Fetch Booking Request
       const request = await tx.bookingRequest.findUnique({
         where: { id: input.bookingRequestId },
@@ -207,8 +208,23 @@ export class BookingApprovalService {
         newValues: { bookingId: booking.id, assignmentId: assignment.id, jobId: job.id, techId: tech.id }
       });
 
-      return { booking, assignment, job };
+      return { booking, assignment, job, request, tech };
     });
+
+    // Dispatch Booking Confirmed SMS to customer (asynchronous, non-blocking)
+    if (result.request?.customer?.phone) {
+      smsService.sendBookingConfirmedSms({
+        customerName: result.request.customer.name,
+        customerPhone: result.request.customer.phone,
+        bookingNumber: result.booking.bookingNumber,
+        scheduledDate: input.scheduledDate,
+        timeSlot: input.timeSlot,
+        technicianName: result.tech?.user?.name,
+        technicianPhone: result.tech?.user?.phone || undefined
+      }).catch(err => console.error('❌ [BOOKING-CONFIRMED-SMS-ERROR]', err));
+    }
+
+    return { booking: result.booking, assignment: result.assignment, job: result.job };
   }
 
   /**
