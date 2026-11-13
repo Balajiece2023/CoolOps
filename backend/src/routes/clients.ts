@@ -9,8 +9,8 @@ export const clientsRouter = Router();
 
 clientsRouter.use(authenticate);
 
-// 1. Search and list clients with summary metrics (Admin & Staff)
-clientsRouter.get('/', authorize(Role.ADMIN, Role.BOOKING_STAFF), async (req: Request, res: Response) => {
+// 1. Search and list clients with summary metrics (Admin, Staff & Technicians)
+clientsRouter.get('/', authorize(Role.ADMIN, Role.BOOKING_STAFF, Role.TECHNICIAN), async (req: Request, res: Response) => {
   const { search, page = '1', limit = '20' } = req.query;
 
   const p = parseInt(String(page), 10);

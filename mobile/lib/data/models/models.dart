@@ -408,6 +408,23 @@ class FieldServiceReportModel {
   final String? voltage;
   final String? equip1Details;
   final String? equip2Details;
+  // Final Test Measurements (As applicable)
+  final String? powerServoStab;
+  final String? voltageNEarth;
+  final String? voltageL1N;
+  final String? voltageL2N;
+  final String? voltageL3N;
+  final String? voltageL1L2;
+  final String? voltageL2L3;
+  final String? voltageL3L1;
+  final String? pressSuc;
+  final String? pressDis;
+  final String? compCurrent;
+  final String? unitCurrents;
+  final String? roomTemp;
+  final String? supplyAirTemp;
+  final String? returnAirTemp;
+  final String? ambientTemp;
   final String observations;
   final String? suggestions;
   final String? customerSignName;
@@ -442,6 +459,22 @@ class FieldServiceReportModel {
     this.voltage,
     this.equip1Details,
     this.equip2Details,
+    this.powerServoStab,
+    this.voltageNEarth,
+    this.voltageL1N,
+    this.voltageL2N,
+    this.voltageL3N,
+    this.voltageL1L2,
+    this.voltageL2L3,
+    this.voltageL3L1,
+    this.pressSuc,
+    this.pressDis,
+    this.compCurrent,
+    this.unitCurrents,
+    this.roomTemp,
+    this.supplyAirTemp,
+    this.returnAirTemp,
+    this.ambientTemp,
     required this.observations,
     this.suggestions,
     this.customerSignName,
@@ -478,6 +511,22 @@ class FieldServiceReportModel {
       voltage: json['voltage'],
       equip1Details: json['equip1Details'],
       equip2Details: json['equip2Details'],
+      powerServoStab: json['powerServoStab'],
+      voltageNEarth: json['voltageNEarth'],
+      voltageL1N: json['voltageL1N'],
+      voltageL2N: json['voltageL2N'],
+      voltageL3N: json['voltageL3N'],
+      voltageL1L2: json['voltageL1L2'],
+      voltageL2L3: json['voltageL2L3'],
+      voltageL3L1: json['voltageL3L1'],
+      pressSuc: json['pressSuc'],
+      pressDis: json['pressDis'],
+      compCurrent: json['compCurrent'],
+      unitCurrents: json['unitCurrents'],
+      roomTemp: json['roomTemp'],
+      supplyAirTemp: json['supplyAirTemp'],
+      returnAirTemp: json['returnAirTemp'],
+      ambientTemp: json['ambientTemp'],
       observations: json['observations'] ?? '',
       suggestions: json['suggestions'],
       customerSignName: json['customerSignName'],

@@ -260,19 +260,19 @@ export async function generateFieldServiceReportPdf(reportId: string, res: Respo
 
   curY += datesBarHeight;
 
-  // 6. Multi-Unit Model & Serial Number Table (10 Rows)
+  // 6. Multi-Unit Model & Serial Number Table (5 Rows)
   const tableStartY = curY;
-  const colSl = 42;
-  const colModel = (pageWidth - colSl) / 2; // ~248.64 pt
+  const colSl = 38;
+  const colModel = (pageWidth - colSl) / 2;
   const colSerial = colModel;
   const xSl = left;
   const xModel = xSl + colSl;
   const xSerial = xModel + colModel;
 
-  const tableHeaderH = 18;
-  const tableRowH = 18;
-  const numRows = 10;
-  const tableTotalH = tableHeaderH + (numRows * tableRowH); // 198 pt
+  const tableHeaderH = 15;
+  const tableRowH = 15;
+  const numRows = 5;
+  const tableTotalH = tableHeaderH + (numRows * tableRowH);
 
   // Table Outer Border
   doc.rect(left, tableStartY, pageWidth, tableTotalH).lineWidth(0.8).stroke('#000000');
@@ -280,9 +280,9 @@ export async function generateFieldServiceReportPdf(reportId: string, res: Respo
   // Table Header Background & Text
   doc.rect(left, tableStartY, pageWidth, tableHeaderH).fillAndStroke('#F8FAFC', '#000000');
   doc.fontSize(7.5).font('Helvetica-Bold').fillColor('#000000');
-  doc.text('Sl.No.', xSl, tableStartY + 5, { width: colSl, align: 'center' });
-  doc.text('UNIT MODEL No.', xModel, tableStartY + 5, { width: colModel, align: 'center' });
-  doc.text('UNIT SERIAL No.', xSerial, tableStartY + 5, { width: colSerial, align: 'center' });
+  doc.text('Sl.No.', xSl, tableStartY + 4, { width: colSl, align: 'center' });
+  doc.text('UNIT MODEL No.', xModel, tableStartY + 4, { width: colModel, align: 'center' });
+  doc.text('UNIT SERIAL No.', xSerial, tableStartY + 4, { width: colSerial, align: 'center' });
 
   // Vertical dividers through entire table
   doc.moveTo(xModel, tableStartY).lineTo(xModel, tableStartY + tableTotalH).lineWidth(0.6).stroke('#000000');
@@ -305,26 +305,23 @@ export async function generateFieldServiceReportPdf(reportId: string, res: Respo
     });
   }
 
-  // Draw 10 rows
+  // Draw 5 rows
   let rowY = tableStartY + tableHeaderH;
   for (let i = 1; i <= numRows; i++) {
-    // Horizontal row separator
     doc.moveTo(left, rowY).lineTo(left + pageWidth, rowY).lineWidth(0.5).stroke('#000000');
 
-    // Sl.No.
-    doc.fontSize(8).font('Helvetica').fillColor('#000000')
-      .text(`${i}`, xSl, rowY + 5, { width: colSl, align: 'center' });
+    doc.fontSize(7.5).font('Helvetica').fillColor('#000000')
+      .text(`${i}`, xSl, rowY + 4, { width: colSl, align: 'center' });
 
-    // Model & Serial if present
     const unit = unitsData[i - 1];
     if (unit) {
       if (unit.model) {
-        doc.fontSize(8).font('Helvetica-Bold').fillColor('#0F172A')
-          .text(unit.model, xModel + 8, rowY + 5, { width: colModel - 16, align: 'left' });
+        doc.fontSize(7.5).font('Helvetica-Bold').fillColor('#0F172A')
+          .text(unit.model, xModel + 6, rowY + 4, { width: colModel - 12, align: 'left' });
       }
       if (unit.serial) {
-        doc.fontSize(8).font('Helvetica').fillColor('#0F172A')
-          .text(unit.serial, xSerial + 8, rowY + 5, { width: colSerial - 16, align: 'left' });
+        doc.fontSize(7.5).font('Helvetica').fillColor('#0F172A')
+          .text(unit.serial, xSerial + 6, rowY + 4, { width: colSerial - 12, align: 'left' });
       }
     }
 
@@ -334,35 +331,34 @@ export async function generateFieldServiceReportPdf(reportId: string, res: Respo
   curY = tableStartY + tableTotalH;
 
   // 7. OBSERVATIONS / REPORT & ACTION Box
-  const obsBoxH = 190;
+  const obsBoxH = 92;
   doc.rect(left, curY, pageWidth, obsBoxH).lineWidth(0.8).stroke('#000000');
 
-  doc.fontSize(8.5).font('Helvetica-Bold').fillColor('#000000')
-    .text('OBSERVATIONS / REPORT & ACTION :', left + 8, curY + 8);
+  doc.fontSize(8).font('Helvetica-Bold').fillColor('#000000')
+    .text('OBSERVATIONS / REPORT & ACTION :', left + 8, curY + 6);
 
-  // Text content
   const obsText = report.observations ? report.observations.trim() : '';
-  const sugText = report.suggestions && report.suggestions.trim().length > 0 ? `\nSuggestion to Customer: ${report.suggestions.trim()}` : '';
+  const sugText = report.suggestions && report.suggestions.trim().length > 0 ? ` | Suggestion: ${report.suggestions.trim()}` : '';
   const fullObsText = `${obsText}${sugText}`.trim();
 
   if (fullObsText) {
-    doc.fontSize(8).font('Helvetica').fillColor('#0F172A')
-      .text(fullObsText, left + 12, curY + 24, {
-        width: pageWidth - 24,
-        lineGap: 3
+    doc.fontSize(7.5).font('Helvetica').fillColor('#0F172A')
+      .text(fullObsText, left + 10, curY + 20, {
+        width: pageWidth - 20,
+        lineGap: 2
       });
   }
 
-  // 4 Dotted lines as shown in official form
+  // 2 Dotted lines for visual notes
   const dotStart = curY + 46;
   doc.save()
-    .lineWidth(0.6)
-    .strokeColor('#475569')
+    .lineWidth(0.5)
+    .strokeColor('#94A3B8')
     .dash(1.5, { space: 2.5 });
 
-  for (let l = 0; l < 4; l++) {
-    const dy = dotStart + (l * 34);
-    if (dy < curY + obsBoxH - 10) {
+  for (let l = 0; l < 2; l++) {
+    const dy = dotStart + (l * 20);
+    if (dy < curY + obsBoxH - 8) {
       doc.moveTo(left + 8, dy).lineTo(left + pageWidth - 8, dy).stroke();
     }
   }
@@ -370,25 +366,136 @@ export async function generateFieldServiceReportPdf(reportId: string, res: Respo
 
   curY += obsBoxH;
 
-  // 8. Signatures Block (Bottom)
-  const sigSpacing = 36;
+  // 8. FINAL TEST MEASUREMENTS (AS APPLICABLE) - Exact table matching official report
+  const ftmHeaderH = 15;
+  const ftmRowH = 16;
+  const ftmTotalH = ftmHeaderH + (4 * ftmRowH);
+  const ftmColW = pageWidth / 4; // 4 equal columns
+
+  // Outer border & Header background
+  doc.rect(left, curY, pageWidth, ftmTotalH).lineWidth(0.8).stroke('#000000');
+  doc.rect(left, curY, pageWidth, ftmHeaderH).fillAndStroke('#F1F5F9', '#000000');
+
+  doc.fontSize(7.5).font('Helvetica-Bold').fillColor('#000000')
+    .text('Final Test Measurements (As applicable)', left, curY + 4, { width: pageWidth, align: 'center' });
+
+  // Draw 3 vertical column dividers inside measurements table
+  for (let c = 1; c < 4; c++) {
+    const vx = left + (c * ftmColW);
+    doc.moveTo(vx, curY + ftmHeaderH).lineTo(vx, curY + ftmTotalH).lineWidth(0.6).stroke('#000000');
+  }
+
+  // Helper function to render a measurement cell
+  const renderFtmCell = (colIdx: number, rowIdx: number, label: string, val: string, unit: string = '') => {
+    const cx = left + (colIdx * ftmColW);
+    const cy = curY + ftmHeaderH + (rowIdx * ftmRowH);
+    const padX = 6;
+    const textY = cy + 4;
+
+    doc.fontSize(6.5).font('Helvetica-Bold').fillColor('#1E293B')
+      .text(label, cx + padX, textY, { width: ftmColW - (padX * 2), continued: true });
+
+    if (val && val.trim().length > 0) {
+      doc.fontSize(7).font('Helvetica-Bold').fillColor('#0284C7')
+        .text(` ${val.trim()}`, { continued: unit.length > 0 });
+      if (unit) {
+        doc.fontSize(6.5).font('Helvetica').fillColor('#475569').text(` ${unit}`);
+      }
+    } else {
+      doc.fontSize(6.5).font('Helvetica').fillColor('#94A3B8')
+        .text(' -', { continued: unit.length > 0 });
+      if (unit) {
+        doc.fontSize(6.5).font('Helvetica').fillColor('#94A3B8').text(` ${unit}`);
+      }
+    }
+  };
+
+  // Draw 4 horizontal row lines
+  for (let r = 1; r <= 4; r++) {
+    const ry = curY + ftmHeaderH + (r * ftmRowH);
+    if (r < 4) {
+      doc.moveTo(left, ry).lineTo(left + pageWidth, ry).lineWidth(0.5).stroke('#000000');
+    }
+  }
+
+  // Row 1:
+  // Col 0: Power Servo/Stab: Yes [ ] No [ ]
+  const r0cy = curY + ftmHeaderH;
+  const isPowerYes = (report.powerServoStab || '').toUpperCase() === 'YES';
+  const isPowerNo = (report.powerServoStab || '').toUpperCase() === 'NO';
+
+  doc.fontSize(6.5).font('Helvetica-Bold').fillColor('#1E293B')
+    .text('Power Servo/Stab:', left + 5, r0cy + 4, { continued: true });
+  doc.font('Helvetica').fillColor('#000000').text(' Yes ');
+
+  // Yes box
+  const yesBoxX = left + 76;
+  const boxY = r0cy + 4;
+  doc.rect(yesBoxX, boxY, 8, 8).lineWidth(0.6).stroke('#000000');
+  if (isPowerYes) {
+    doc.save()
+      .lineWidth(1.2).strokeColor('#0284C7')
+      .moveTo(yesBoxX + 1.5, boxY + 4).lineTo(yesBoxX + 3.5, boxY + 6.5).lineTo(yesBoxX + 6.5, boxY + 1.5)
+      .stroke().restore();
+  }
+
+  doc.fontSize(6.5).font('Helvetica').fillColor('#000000')
+    .text(' No ', yesBoxX + 12, r0cy + 4, { continued: false });
+
+  // No box
+  const noBoxX = yesBoxX + 26;
+  doc.rect(noBoxX, boxY, 8, 8).lineWidth(0.6).stroke('#000000');
+  if (isPowerNo) {
+    doc.save()
+      .lineWidth(1.2).strokeColor('#0284C7')
+      .moveTo(noBoxX + 1.5, boxY + 4).lineTo(noBoxX + 3.5, boxY + 6.5).lineTo(noBoxX + 6.5, boxY + 1.5)
+      .stroke().restore();
+  }
+
+  // Row 1 remaining columns
+  renderFtmCell(1, 0, 'Voltage (N- Earth):', report.voltageNEarth || '', 'V');
+  renderFtmCell(2, 0, 'Press (Suc):', report.pressSuc || report.suctionPressure || '', 'psi');
+  renderFtmCell(3, 0, 'Room Temp.:', report.roomTemp || report.roomTemperature || '', '°C');
+
+  // Row 2:
+  renderFtmCell(0, 1, 'Voltage (L1-N):', report.voltageL1N || report.voltage || '', 'V');
+  renderFtmCell(1, 1, 'Voltage (L1 - L2):', report.voltageL1L2 || '', 'V');
+  renderFtmCell(2, 1, 'Press (Dis):', report.pressDis || report.dischargePressure || '', 'psi');
+  renderFtmCell(3, 1, 'Supply Air Temp.:', report.supplyAirTemp || '', '°C');
+
+  // Row 3:
+  renderFtmCell(0, 2, 'Voltage (L2-N):', report.voltageL2N || '', 'V');
+  renderFtmCell(1, 2, 'Voltage (L2 - L3):', report.voltageL2L3 || '', 'V');
+  renderFtmCell(2, 2, 'Comp. Current:', report.compCurrent || '', 'Amp');
+  renderFtmCell(3, 2, 'Return Air Temp.:', report.returnAirTemp || '', '°C');
+
+  // Row 4:
+  renderFtmCell(0, 3, 'Voltage (L3-N):', report.voltageL3N || '', 'V');
+  renderFtmCell(1, 3, 'Voltage (L3 - L1):', report.voltageL3L1 || '', 'V');
+  renderFtmCell(2, 3, 'Unit Currents:', report.unitCurrents || report.runningCurrent || '', 'Amp');
+  renderFtmCell(3, 3, 'Ambient Temp.:', report.ambientTemp || '', '°C');
+
+  curY += ftmTotalH;
+
+  // 9. Signatures Block (Bottom)
+  const sigSpacing = 28;
   curY += sigSpacing;
 
   // Signature names / digital stamps
   if (report.customerSignName) {
     doc.fontSize(8.5).font('Helvetica-Oblique').fillColor('#0F172A')
-      .text(`Signed by: ${report.customerSignName}`, left + 14, curY - 14);
+      .text(`Signed by: ${report.customerSignName}`, left + 14, curY - 12);
   }
 
-  doc.fontSize(9).font('Helvetica-Bold').fillColor('#0284C7')
-    .text(report.serviceEngineerName, left + halfWidth + 40, curY - 14);
+  doc.fontSize(8.5).font('Helvetica-Bold').fillColor('#0284C7')
+    .text(report.serviceEngineerName, left + halfWidth + 40, curY - 12);
 
   // Signature Labels exactly matching template
-  doc.fontSize(8).font('Helvetica-Bold').fillColor('#000000')
+  doc.fontSize(7.5).font('Helvetica-Bold').fillColor('#000000')
     .text('(CUSTOMER\'S SIGNATURE WITH SEAL)', left + 14, curY);
 
-  doc.fontSize(8).font('Helvetica-Bold').fillColor('#000000')
-    .text('(TECHNICAIANS SIGNATURE)', left + halfWidth + 40, curY);
+  doc.fontSize(7.5).font('Helvetica-Bold').fillColor('#000000')
+    .text('(TECHNICIAN\'S SIGNATURE)', left + halfWidth + 40, curY);
 
   // End Document
   doc.end();

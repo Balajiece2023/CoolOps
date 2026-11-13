@@ -273,31 +273,57 @@ class _FieldServiceReportsViewState extends ConsumerState<FieldServiceReportsVie
                 const SizedBox(height: 14),
               ],
 
-              // Technical Parameters Table
-              const Text('TECHNICAL PARAMETERS:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+              // Final Test Measurements (As applicable)
+              const Row(
+                children: [
+                  Icon(Icons.speed_outlined, color: AppTheme.primaryBlue, size: 16),
+                  SizedBox(width: 6),
+                  Text('FINAL TEST MEASUREMENTS (AS APPLICABLE):', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                ],
+              ),
               const SizedBox(height: 6),
               Container(
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(10),
                   border: Border.all(color: const Color(0xFFCBD5E1)),
                 ),
                 child: Column(
                   children: [
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                      color: const Color(0xFFF1F5F9),
-                      child: const Row(
+                      decoration: const BoxDecoration(
+                        color: Color(0xFFF1F5F9),
+                        borderRadius: BorderRadius.vertical(top: Radius.circular(9)),
+                      ),
+                      child: Row(
                         children: [
-                          Expanded(flex: 3, child: Text('PARAMETER', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
-                          Expanded(flex: 2, child: Text('VALUE (Equip-1)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: AppTheme.primaryBlue))),
+                          const Text('Power Servo / Stab: ', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+                          Text(
+                            report.powerServoStab != null ? report.powerServoStab!.toUpperCase() : 'NO',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 11,
+                              color: (report.powerServoStab ?? '').toUpperCase() == 'YES' ? const Color(0xFF16A34A) : const Color(0xFF64748B),
+                            ),
+                          ),
                         ],
                       ),
                     ),
-                    _buildParamRow('Running Current (A)', report.runningCurrent ?? '-'),
-                    _buildParamRow('Suction Pressure', report.suctionPressure ?? '-'),
-                    _buildParamRow('Discharge Pressure', report.dischargePressure ?? '-'),
-                    _buildParamRow('Room Temperature', report.roomTemperature ?? '-'),
-                    _buildParamRow('Voltage', report.voltage ?? '-', isLast: true),
+                    _buildParamRow('Voltage (N - Earth)', report.voltageNEarth ?? '-'),
+                    _buildParamRow('Voltage (L1 - N)', report.voltageL1N ?? report.voltage ?? '-'),
+                    _buildParamRow('Voltage (L1 - L2)', report.voltageL1L2 ?? '-'),
+                    _buildParamRow('Voltage (L2 - N)', report.voltageL2N ?? '-'),
+                    _buildParamRow('Voltage (L2 - L3)', report.voltageL2L3 ?? '-'),
+                    _buildParamRow('Voltage (L3 - N)', report.voltageL3N ?? '-'),
+                    _buildParamRow('Voltage (L3 - L1)', report.voltageL3L1 ?? '-'),
+                    _buildParamRow('Suction Pressure (psi)', report.pressSuc ?? report.suctionPressure ?? '-'),
+                    _buildParamRow('Discharge Pressure (psi)', report.pressDis ?? report.dischargePressure ?? '-'),
+                    _buildParamRow('Compressor Current (Amp)', report.compCurrent ?? '-'),
+                    _buildParamRow('Unit Currents (Amp)', report.unitCurrents ?? report.runningCurrent ?? '-'),
+                    _buildParamRow('Room Temp (°C)', report.roomTemp ?? report.roomTemperature ?? '-'),
+                    _buildParamRow('Supply Air Temp (°C)', report.supplyAirTemp ?? '-'),
+                    _buildParamRow('Return Air Temp (°C)', report.returnAirTemp ?? '-'),
+                    _buildParamRow('Ambient Temp (°C)', report.ambientTemp ?? '-', isLast: true),
                   ],
                 ),
               ),
@@ -354,11 +380,22 @@ class _FieldServiceReportsViewState extends ConsumerState<FieldServiceReportsVie
     final indoorSlCtrl = TextEditingController();
     final outdoorSlCtrl = TextEditingController();
     final errorCodeCtrl = TextEditingController(text: 'NONE');
-    final runningCurrentCtrl = TextEditingController(text: '14.5 A');
-    final suctionPressureCtrl = TextEditingController(text: '65 PSI');
-    final dischargePressureCtrl = TextEditingController(text: '250 PSI');
-    final roomTempCtrl = TextEditingController(text: '22 °C');
-    final voltageCtrl = TextEditingController(text: '230 V');
+    String powerServoStab = 'NO';
+    final voltageNEarthCtrl = TextEditingController();
+    final voltageL1NCtrl = TextEditingController(text: '230 V');
+    final voltageL2NCtrl = TextEditingController();
+    final voltageL3NCtrl = TextEditingController();
+    final voltageL1L2Ctrl = TextEditingController();
+    final voltageL2L3Ctrl = TextEditingController();
+    final voltageL3L1Ctrl = TextEditingController();
+    final pressSucCtrl = TextEditingController(text: '65');
+    final pressDisCtrl = TextEditingController(text: '250');
+    final compCurrentCtrl = TextEditingController(text: '14.5');
+    final unitCurrentsCtrl = TextEditingController(text: '14.5');
+    final roomTempCtrl = TextEditingController(text: '22');
+    final supplyAirTempCtrl = TextEditingController();
+    final returnAirTempCtrl = TextEditingController();
+    final ambientTempCtrl = TextEditingController(text: '32');
     final obsCtrl = TextEditingController(text: prefilledJob?.notes ?? prefilledJob?.diagnosis ?? '');
     final sugCtrl = TextEditingController(text: 'Recommend regular filter wash every 15 days.');
     final custSignCtrl = TextEditingController(text: prefilledJob?.customerName ?? '');
@@ -517,25 +554,118 @@ class _FieldServiceReportsViewState extends ConsumerState<FieldServiceReportsVie
                 ),
                 const SizedBox(height: 14),
 
-                // Technical Parameters
-                const Text('Technical Parameters (Equip-1)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                const SizedBox(height: 6),
-                Row(
-                  children: [
-                    Expanded(child: TextField(controller: runningCurrentCtrl, decoration: const InputDecoration(labelText: 'Running Current', isDense: true, border: OutlineInputBorder()))),
-                    const SizedBox(width: 8),
-                    Expanded(child: TextField(controller: voltageCtrl, decoration: const InputDecoration(labelText: 'Voltage', isDense: true, border: OutlineInputBorder()))),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Expanded(child: TextField(controller: suctionPressureCtrl, decoration: const InputDecoration(labelText: 'Suction Press.', isDense: true, border: OutlineInputBorder()))),
-                    const SizedBox(width: 8),
-                    Expanded(child: TextField(controller: dischargePressureCtrl, decoration: const InputDecoration(labelText: 'Discharge Press.', isDense: true, border: OutlineInputBorder()))),
-                    const SizedBox(width: 8),
-                    Expanded(child: TextField(controller: roomTempCtrl, decoration: const InputDecoration(labelText: 'Room Temp', isDense: true, border: OutlineInputBorder()))),
-                  ],
+                // Final Test Measurements (As applicable)
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: const Color(0xFFCBD5E1)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.speed, color: AppTheme.primaryBlue, size: 18),
+                          const SizedBox(width: 6),
+                          const Text('Final Test Measurements (As applicable)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppTheme.primaryBlue)),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+
+                      // Power Servo/Stab
+                      Row(
+                        children: [
+                          const Text('Power Servo / Stab: ', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
+                          const SizedBox(width: 8),
+                          ChoiceChip(
+                            label: const Text('Yes'),
+                            selected: powerServoStab == 'YES',
+                            onSelected: (val) => setModalState(() => powerServoStab = val ? 'YES' : 'NO'),
+                            visualDensity: VisualDensity.compact,
+                          ),
+                          const SizedBox(width: 6),
+                          ChoiceChip(
+                            label: const Text('No'),
+                            selected: powerServoStab == 'NO',
+                            onSelected: (val) => setModalState(() => powerServoStab = val ? 'NO' : 'YES'),
+                            visualDensity: VisualDensity.compact,
+                          ),
+                        ],
+                      ),
+                      const Divider(height: 16),
+
+                      // Voltages Section
+                      const Text('Voltages (V)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Color(0xFF475569))),
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          Expanded(child: TextField(controller: voltageNEarthCtrl, decoration: const InputDecoration(labelText: 'N-Earth', hintText: 'e.g. 2V', isDense: true, border: OutlineInputBorder()))),
+                          const SizedBox(width: 6),
+                          Expanded(child: TextField(controller: voltageL1NCtrl, decoration: const InputDecoration(labelText: 'L1-N', hintText: 'e.g. 230V', isDense: true, border: OutlineInputBorder()))),
+                          const SizedBox(width: 6),
+                          Expanded(child: TextField(controller: voltageL1L2Ctrl, decoration: const InputDecoration(labelText: 'L1-L2', hintText: 'e.g. 400V', isDense: true, border: OutlineInputBorder()))),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          Expanded(child: TextField(controller: voltageL2NCtrl, decoration: const InputDecoration(labelText: 'L2-N', hintText: 'e.g. 230V', isDense: true, border: OutlineInputBorder()))),
+                          const SizedBox(width: 6),
+                          Expanded(child: TextField(controller: voltageL2L3Ctrl, decoration: const InputDecoration(labelText: 'L2-L3', hintText: 'e.g. 400V', isDense: true, border: OutlineInputBorder()))),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          Expanded(child: TextField(controller: voltageL3NCtrl, decoration: const InputDecoration(labelText: 'L3-N', hintText: 'e.g. 230V', isDense: true, border: OutlineInputBorder()))),
+                          const SizedBox(width: 6),
+                          Expanded(child: TextField(controller: voltageL3L1Ctrl, decoration: const InputDecoration(labelText: 'L3-L1', hintText: 'e.g. 400V', isDense: true, border: OutlineInputBorder()))),
+                        ],
+                      ),
+                      const Divider(height: 16),
+
+                      // Pressures & Currents
+                      const Text('Pressures (psi) & Currents (Amp)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Color(0xFF475569))),
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          Expanded(child: TextField(controller: pressSucCtrl, decoration: const InputDecoration(labelText: 'Press (Suc) psi', hintText: '65', isDense: true, border: OutlineInputBorder()))),
+                          const SizedBox(width: 6),
+                          Expanded(child: TextField(controller: pressDisCtrl, decoration: const InputDecoration(labelText: 'Press (Dis) psi', hintText: '250', isDense: true, border: OutlineInputBorder()))),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          Expanded(child: TextField(controller: compCurrentCtrl, decoration: const InputDecoration(labelText: 'Comp. Current (A)', hintText: '14.5', isDense: true, border: OutlineInputBorder()))),
+                          const SizedBox(width: 6),
+                          Expanded(child: TextField(controller: unitCurrentsCtrl, decoration: const InputDecoration(labelText: 'Unit Currents (A)', hintText: '14.5', isDense: true, border: OutlineInputBorder()))),
+                        ],
+                      ),
+                      const Divider(height: 16),
+
+                      // Temperatures
+                      const Text('Temperatures (°C)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Color(0xFF475569))),
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          Expanded(child: TextField(controller: roomTempCtrl, decoration: const InputDecoration(labelText: 'Room Temp °C', hintText: '22', isDense: true, border: OutlineInputBorder()))),
+                          const SizedBox(width: 6),
+                          Expanded(child: TextField(controller: supplyAirTempCtrl, decoration: const InputDecoration(labelText: 'Supply Air °C', hintText: '12', isDense: true, border: OutlineInputBorder()))),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          Expanded(child: TextField(controller: returnAirTempCtrl, decoration: const InputDecoration(labelText: 'Return Air °C', hintText: '24', isDense: true, border: OutlineInputBorder()))),
+                          const SizedBox(width: 6),
+                          Expanded(child: TextField(controller: ambientTempCtrl, decoration: const InputDecoration(labelText: 'Ambient °C', hintText: '32', isDense: true, border: OutlineInputBorder()))),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
                 const SizedBox(height: 14),
 
@@ -585,11 +715,27 @@ class _FieldServiceReportsViewState extends ConsumerState<FieldServiceReportsVie
                               indoorSerialNo: indoorSlCtrl.text.trim().isNotEmpty ? indoorSlCtrl.text.trim() : null,
                               outdoorSerialNo: outdoorSlCtrl.text.trim().isNotEmpty ? outdoorSlCtrl.text.trim() : null,
                               errorCode: errorCodeCtrl.text.trim().isNotEmpty ? errorCodeCtrl.text.trim() : null,
-                              runningCurrent: runningCurrentCtrl.text.trim().isNotEmpty ? runningCurrentCtrl.text.trim() : null,
-                              suctionPressure: suctionPressureCtrl.text.trim().isNotEmpty ? suctionPressureCtrl.text.trim() : null,
-                              dischargePressure: dischargePressureCtrl.text.trim().isNotEmpty ? dischargePressureCtrl.text.trim() : null,
+                              runningCurrent: unitCurrentsCtrl.text.trim().isNotEmpty ? unitCurrentsCtrl.text.trim() : null,
+                              suctionPressure: pressSucCtrl.text.trim().isNotEmpty ? pressSucCtrl.text.trim() : null,
+                              dischargePressure: pressDisCtrl.text.trim().isNotEmpty ? pressDisCtrl.text.trim() : null,
                               roomTemperature: roomTempCtrl.text.trim().isNotEmpty ? roomTempCtrl.text.trim() : null,
-                              voltage: voltageCtrl.text.trim().isNotEmpty ? voltageCtrl.text.trim() : null,
+                              voltage: voltageL1NCtrl.text.trim().isNotEmpty ? voltageL1NCtrl.text.trim() : null,
+                              powerServoStab: powerServoStab,
+                              voltageNEarth: voltageNEarthCtrl.text.trim().isNotEmpty ? voltageNEarthCtrl.text.trim() : null,
+                              voltageL1N: voltageL1NCtrl.text.trim().isNotEmpty ? voltageL1NCtrl.text.trim() : null,
+                              voltageL2N: voltageL2NCtrl.text.trim().isNotEmpty ? voltageL2NCtrl.text.trim() : null,
+                              voltageL3N: voltageL3NCtrl.text.trim().isNotEmpty ? voltageL3NCtrl.text.trim() : null,
+                              voltageL1L2: voltageL1L2Ctrl.text.trim().isNotEmpty ? voltageL1L2Ctrl.text.trim() : null,
+                              voltageL2L3: voltageL2L3Ctrl.text.trim().isNotEmpty ? voltageL2L3Ctrl.text.trim() : null,
+                              voltageL3L1: voltageL3L1Ctrl.text.trim().isNotEmpty ? voltageL3L1Ctrl.text.trim() : null,
+                              pressSuc: pressSucCtrl.text.trim().isNotEmpty ? pressSucCtrl.text.trim() : null,
+                              pressDis: pressDisCtrl.text.trim().isNotEmpty ? pressDisCtrl.text.trim() : null,
+                              compCurrent: compCurrentCtrl.text.trim().isNotEmpty ? compCurrentCtrl.text.trim() : null,
+                              unitCurrents: unitCurrentsCtrl.text.trim().isNotEmpty ? unitCurrentsCtrl.text.trim() : null,
+                              roomTemp: roomTempCtrl.text.trim().isNotEmpty ? roomTempCtrl.text.trim() : null,
+                              supplyAirTemp: supplyAirTempCtrl.text.trim().isNotEmpty ? supplyAirTempCtrl.text.trim() : null,
+                              returnAirTemp: returnAirTempCtrl.text.trim().isNotEmpty ? returnAirTempCtrl.text.trim() : null,
+                              ambientTemp: ambientTempCtrl.text.trim().isNotEmpty ? ambientTempCtrl.text.trim() : null,
                               observations: obsCtrl.text.trim(),
                               suggestions: sugCtrl.text.trim().isNotEmpty ? sugCtrl.text.trim() : null,
                               customerSignName: custSignCtrl.text.trim().isNotEmpty ? custSignCtrl.text.trim() : null,

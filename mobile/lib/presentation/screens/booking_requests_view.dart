@@ -130,6 +130,7 @@ class _BookingRequestsViewState extends ConsumerState<BookingRequestsView> {
     final pinCtrl = TextEditingController(text: '605001');
     final complaintCtrl = TextEditingController();
     final brandCtrl = TextEditingController(text: 'Daikin');
+    final customAcTypeCtrl = TextEditingController();
     final dateCtrl = TextEditingController(text: DateTime.now().add(const Duration(days: 1)).toString().split(' ')[0]);
     final customServiceCtrl = TextEditingController();
     final locationLinkCtrl = TextEditingController();
@@ -141,247 +142,447 @@ class _BookingRequestsViewState extends ConsumerState<BookingRequestsView> {
     String selectedServiceCode = 'CHECKUP';
     String acType = 'SPLIT';
 
+    List<Map<String, dynamic>> existingClients = [];
+    bool isLoadingClients = true;
+    String? selectedClientId;
+    bool hasInitiatedFetch = false;
+
     showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDialogState) => AlertDialog(
-          title: const Row(
-            children: [
-              Icon(Icons.confirmation_number_outlined, color: AppTheme.primaryBlue),
-              SizedBox(width: 8),
-              Text('Log Service Incident Ticket', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-            ],
-          ),
-          content: SingleChildScrollView(
-            child: ConstrainedBox(
-              constraints: BoxConstraints(
-                maxWidth: MediaQuery.of(ctx).size.width * 0.9,
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('Customer Information', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppTheme.primaryBlue)),
-                  const SizedBox(height: 6),
-                  TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Customer Full Name *')),
-                  const SizedBox(height: 8),
-                  TextField(controller: phoneCtrl, keyboardType: TextInputType.phone, decoration: const InputDecoration(labelText: 'Phone Number (10 Digits) *')),
-                  const SizedBox(height: 8),
-                  TextField(controller: addrCtrl, decoration: const InputDecoration(labelText: 'Street Address *')),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Expanded(
-                        flex: 3,
-                        child: TextField(
-                          controller: areaCtrl,
-                          decoration: const InputDecoration(labelText: 'Area / Neighborhood *'),
-                        ),
+        builder: (ctx, setDialogState) {
+          if (!hasInitiatedFetch) {
+            hasInitiatedFetch = true;
+            ref.read(apiRepositoryProvider).getClients(limit: 100).then((clients) {
+              setDialogState(() {
+                existingClients = clients;
+                isLoadingClients = false;
+              });
+            }).catchError((_) {
+              setDialogState(() {
+                isLoadingClients = false;
+              });
+            });
+          }
+
+          void applyClient(Map<String, dynamic>? client) {
+            if (client == null) {
+              selectedClientId = null;
+              return;
+            }
+            selectedClientId = client['id']?.toString();
+            nameCtrl.text = client['name']?.toString() ?? '';
+            phoneCtrl.text = client['phone']?.toString() ?? '';
+
+            final addresses = (client['addresses'] as List<dynamic>?) ?? [];
+            if (addresses.isNotEmpty) {
+              final addr = addresses.first;
+              addrCtrl.text = addr['line1']?.toString() ?? '';
+              areaCtrl.text = addr['area']?.toString() ?? '';
+              pinCtrl.text = addr['pincode']?.toString() ?? '605001';
+              if (addr['latitude'] != null) {
+                detectedLat = (addr['latitude'] as num).toDouble();
+                detectedLng = (addr['longitude'] as num).toDouble();
+              }
+            }
+
+            final acUnits = (client['acUnits'] as List<dynamic>?) ?? [];
+            if (acUnits.isNotEmpty) {
+              final unit = acUnits.first;
+              if (unit['brand'] != null && unit['brand'].toString().isNotEmpty) {
+                brandCtrl.text = unit['brand'].toString();
+              }
+              if (unit['acType'] != null && unit['acType'].toString().isNotEmpty) {
+                final uType = unit['acType'].toString().toUpperCase();
+                const standardTypes = ['SPLIT', 'WINDOW', 'CASSETTE', 'DUCTABLE', 'TOWER', 'VRF', 'MULTI_SPLIT'];
+                if (standardTypes.contains(uType)) {
+                  acType = uType;
+                } else {
+                  acType = 'CUSTOM';
+                  customAcTypeCtrl.text = unit['acType'].toString();
+                }
+              }
+            }
+          }
+
+          return AlertDialog(
+            title: const Row(
+              children: [
+                Icon(Icons.confirmation_number_outlined, color: AppTheme.primaryBlue),
+                SizedBox(width: 8),
+                Text('Log Service Incident Ticket', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              ],
+            ),
+            content: SingleChildScrollView(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxWidth: MediaQuery.of(ctx).size.width * 0.9,
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Old Customer Selector Banner & Dropdown
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF0FDF4),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: const Color(0xFF86EFAC)),
                       ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        flex: 2,
-                        child: TextField(
-                          controller: pinCtrl,
-                          keyboardType: TextInputType.number,
-                          decoration: const InputDecoration(labelText: 'Pincode *'),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton.icon(
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: detectedLat != null ? const Color(0xFF16A34A) : AppTheme.primaryBlue,
-                        side: BorderSide(color: detectedLat != null ? const Color(0xFF16A34A) : AppTheme.primaryBlue),
-                        visualDensity: VisualDensity.compact,
-                      ),
-                      icon: isDetectingGps
-                          ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
-                          : Icon(detectedLat != null ? Icons.check_circle : Icons.my_location, size: 16),
-                      label: Text(
-                        detectedLat != null
-                            ? '📍 Exact GPS Attached (${detectedLat!.toStringAsFixed(4)}, ${detectedLng!.toStringAsFixed(4)})'
-                            : '📍 Auto-Capture Customer GPS Location',
-                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-                      ),
-                      onPressed: isDetectingGps
-                          ? null
-                          : () async {
-                              setDialogState(() => isDetectingGps = true);
-                              try {
-                                final pos = await LocationService.getCurrentPosition();
-                                if (pos != null) {
-                                  setDialogState(() {
-                                    detectedLat = pos.latitude;
-                                    detectedLng = pos.longitude;
-                                    isDetectingGps = false;
-                                  });
-                                  if (ctx.mounted) {
-                                    ScaffoldMessenger.of(ctx).showSnackBar(
-                                      SnackBar(
-                                        content: Text('📍 Exact GPS captured (${pos.latitude.toStringAsFixed(4)}, ${pos.longitude.toStringAsFixed(4)})'),
-                                        backgroundColor: const Color(0xFF16A34A),
-                                      ),
-                                    );
-                                  }
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              const Icon(Icons.person_pin, color: Color(0xFF16A34A), size: 18),
+                              const SizedBox(width: 6),
+                              const Expanded(
+                                child: Text(
+                                  'Select Old / Existing Customer',
+                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Color(0xFF166534)),
+                                ),
+                              ),
+                              if (isLoadingClients)
+                                const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF16A34A))),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          DropdownButtonFormField<String>(
+                            value: selectedClientId,
+                            isExpanded: true,
+                            decoration: InputDecoration(
+                              isDense: true,
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                              filled: true,
+                              fillColor: Colors.white,
+                              hintText: isLoadingClients ? 'Loading customers...' : 'Choose customer to auto-fill details...',
+                              hintStyle: const TextStyle(fontSize: 12),
+                            ),
+                            items: [
+                              const DropdownMenuItem<String>(
+                                value: null,
+                                child: Text('➕ New / Walk-in Customer (Manual Entry)', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.primaryBlue)),
+                              ),
+                              ...existingClients.map((client) {
+                                final cId = client['id']?.toString() ?? '';
+                                final cName = client['name']?.toString() ?? 'Customer';
+                                final cPhone = client['phone']?.toString() ?? '';
+                                final addresses = (client['addresses'] as List<dynamic>?) ?? [];
+                                final cArea = addresses.isNotEmpty ? addresses.first['area']?.toString() ?? '' : '';
+                                final areaSuffix = cArea.isNotEmpty ? ' • $cArea' : '';
+                                return DropdownMenuItem<String>(
+                                  value: cId,
+                                  child: Text(
+                                    '$cName ($cPhone)$areaSuffix',
+                                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                );
+                              }),
+                            ],
+                            onChanged: (val) {
+                              setDialogState(() {
+                                if (val == null) {
+                                  selectedClientId = null;
+                                  nameCtrl.clear();
+                                  phoneCtrl.clear();
+                                  addrCtrl.clear();
+                                  areaCtrl.clear();
+                                  pinCtrl.text = '605001';
+                                  detectedLat = null;
+                                  detectedLng = null;
+                                  brandCtrl.text = 'Daikin';
+                                  acType = 'SPLIT';
+                                  customAcTypeCtrl.clear();
                                 } else {
-                                  setDialogState(() => isDetectingGps = false);
-                                  if (ctx.mounted) {
-                                    ScaffoldMessenger.of(ctx).showSnackBar(
-                                      const SnackBar(content: Text('Could not obtain GPS fix. Address will be geocoded automatically.')),
-                                    );
+                                  final client = existingClients.firstWhere((c) => c['id']?.toString() == val, orElse: () => {});
+                                  if (client.isNotEmpty) {
+                                    applyClient(client);
                                   }
                                 }
-                              } catch (_) {
-                                setDialogState(() => isDetectingGps = false);
-                              }
+                              });
                             },
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: locationLinkCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Google Maps Link / WhatsApp Location (Optional)',
-                      hintText: 'e.g. https://maps.app.goo.gl/... or coordinates',
-                      prefixIcon: Icon(Icons.link, size: 18),
-                      isDense: true,
-                    ),
-                  ),
-                  const Divider(height: 24),
-                  const Text('Ticket Details', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppTheme.primaryBlue)),
-                  const SizedBox(height: 6),
-                  DropdownButtonFormField<String>(
-                    value: selectedServiceCode,
-                    isExpanded: true,
-                    decoration: const InputDecoration(labelText: 'Service Type / Package *'),
-                    items: const [
-                      DropdownMenuItem(value: 'CHECKUP', child: Text('Comprehensive AC Inspection (₹499)', overflow: TextOverflow.ellipsis)),
-                      DropdownMenuItem(value: 'WASH', child: Text('Jet Pump Foam Wash & Cleaning (₹699)', overflow: TextOverflow.ellipsis)),
-                      DropdownMenuItem(value: 'GAS_CHARGE', child: Text('Gas Leak Detection & Top-up (₹1499)', overflow: TextOverflow.ellipsis)),
-                      DropdownMenuItem(value: 'PCB_REPAIR', child: Text('Inverter PCB Board Diagnostics & Repair (₹1200)', overflow: TextOverflow.ellipsis)),
-                      DropdownMenuItem(value: 'INSTALLATION', child: Text('Split AC New Installation (₹1500)', overflow: TextOverflow.ellipsis)),
-                      DropdownMenuItem(value: 'UNINSTALLATION', child: Text('Split AC Uninstallation & Safe Packing (₹799)', overflow: TextOverflow.ellipsis)),
-                      DropdownMenuItem(
-                        value: 'CUSTOM',
-                        child: Text('➕ Enter Custom Service Package...', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.primaryBlue)),
+                          ),
+                          if (selectedClientId != null) ...[
+                            const SizedBox(height: 6),
+                            Row(
+                              children: [
+                                const Icon(Icons.check_circle, size: 14, color: Color(0xFF16A34A)),
+                                const SizedBox(width: 4),
+                                const Text('Customer details auto-filled', style: TextStyle(fontSize: 11, color: Color(0xFF166534), fontWeight: FontWeight.bold)),
+                                const Spacer(),
+                                InkWell(
+                                  onTap: () {
+                                    setDialogState(() {
+                                      selectedClientId = null;
+                                      nameCtrl.clear();
+                                      phoneCtrl.clear();
+                                      addrCtrl.clear();
+                                      areaCtrl.clear();
+                                      pinCtrl.text = '605001';
+                                      detectedLat = null;
+                                      detectedLng = null;
+                                      customAcTypeCtrl.clear();
+                                    });
+                                  },
+                                  child: const Text('Clear', style: TextStyle(fontSize: 11, color: Colors.red, fontWeight: FontWeight.bold)),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ],
                       ),
-                    ],
-                    onChanged: (val) => setDialogState(() => selectedServiceCode = val ?? 'CHECKUP'),
-                  ),
-                  if (selectedServiceCode == 'CUSTOM') ...[
+                    ),
+
+                    const Text('Customer Information', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppTheme.primaryBlue)),
+                    const SizedBox(height: 6),
+                    TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Customer Full Name *')),
+                    const SizedBox(height: 8),
+                    TextField(controller: phoneCtrl, keyboardType: TextInputType.phone, decoration: const InputDecoration(labelText: 'Phone Number (10 Digits) *')),
+                    const SizedBox(height: 8),
+                    TextField(controller: addrCtrl, decoration: const InputDecoration(labelText: 'Street Address *')),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          flex: 3,
+                          child: TextField(
+                            controller: areaCtrl,
+                            decoration: const InputDecoration(labelText: 'Area / Neighborhood *'),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          flex: 2,
+                          child: TextField(
+                            controller: pinCtrl,
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(labelText: 'Pincode *'),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: detectedLat != null ? const Color(0xFF16A34A) : AppTheme.primaryBlue,
+                          side: BorderSide(color: detectedLat != null ? const Color(0xFF16A34A) : AppTheme.primaryBlue),
+                          visualDensity: VisualDensity.compact,
+                        ),
+                        icon: isDetectingGps
+                            ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                            : Icon(detectedLat != null ? Icons.check_circle : Icons.my_location, size: 16),
+                        label: Text(
+                          detectedLat != null
+                              ? '📍 Exact GPS Attached (${detectedLat!.toStringAsFixed(4)}, ${detectedLng!.toStringAsFixed(4)})'
+                              : '📍 Auto-Capture Customer GPS Location',
+                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                        ),
+                        onPressed: isDetectingGps
+                            ? null
+                            : () async {
+                                setDialogState(() => isDetectingGps = true);
+                                try {
+                                  final pos = await LocationService.getCurrentPosition();
+                                  if (pos != null) {
+                                    setDialogState(() {
+                                      detectedLat = pos.latitude;
+                                      detectedLng = pos.longitude;
+                                      isDetectingGps = false;
+                                    });
+                                    if (ctx.mounted) {
+                                      ScaffoldMessenger.of(ctx).showSnackBar(
+                                        SnackBar(
+                                          content: Text('📍 Exact GPS captured (${pos.latitude.toStringAsFixed(4)}, ${pos.longitude.toStringAsFixed(4)})'),
+                                          backgroundColor: const Color(0xFF16A34A),
+                                        ),
+                                      );
+                                    }
+                                  } else {
+                                    setDialogState(() => isDetectingGps = false);
+                                    if (ctx.mounted) {
+                                      ScaffoldMessenger.of(ctx).showSnackBar(
+                                        const SnackBar(content: Text('Could not obtain GPS fix. Address will be geocoded automatically.')),
+                                      );
+                                    }
+                                  }
+                                } catch (_) {
+                                  setDialogState(() => isDetectingGps = false);
+                                }
+                              },
+                      ),
+                    ),
                     const SizedBox(height: 8),
                     TextField(
-                      controller: customServiceCtrl,
+                      controller: locationLinkCtrl,
                       decoration: const InputDecoration(
-                        labelText: 'Custom Package Name *',
-                        hintText: 'e.g. Copper Piping Replacement & Nitrogen Testing',
-                        prefixIcon: Icon(Icons.handyman_outlined, color: AppTheme.primaryBlue, size: 20),
+                        labelText: 'Google Maps Link / WhatsApp Location (Optional)',
+                        hintText: 'e.g. https://maps.app.goo.gl/... or coordinates',
+                        prefixIcon: Icon(Icons.link, size: 18),
+                        isDense: true,
                       ),
                     ),
+                    const Divider(height: 24),
+                    const Text('Ticket Details', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppTheme.primaryBlue)),
+                    const SizedBox(height: 6),
+                    DropdownButtonFormField<String>(
+                      value: selectedServiceCode,
+                      isExpanded: true,
+                      decoration: const InputDecoration(labelText: 'Service Type / Package *'),
+                      items: const [
+                        DropdownMenuItem(value: 'CHECKUP', child: Text('Comprehensive AC Inspection (₹499)', overflow: TextOverflow.ellipsis)),
+                        DropdownMenuItem(value: 'WASH', child: Text('Jet Pump Foam Wash & Cleaning (₹699)', overflow: TextOverflow.ellipsis)),
+                        DropdownMenuItem(value: 'GAS_CHARGE', child: Text('Gas Leak Detection & Top-up (₹1499)', overflow: TextOverflow.ellipsis)),
+                        DropdownMenuItem(value: 'PCB_REPAIR', child: Text('Inverter PCB Board Diagnostics & Repair (₹1200)', overflow: TextOverflow.ellipsis)),
+                        DropdownMenuItem(value: 'INSTALLATION', child: Text('Split AC New Installation (₹1500)', overflow: TextOverflow.ellipsis)),
+                        DropdownMenuItem(value: 'UNINSTALLATION', child: Text('Split AC Uninstallation & Safe Packing (₹799)', overflow: TextOverflow.ellipsis)),
+                        DropdownMenuItem(
+                          value: 'CUSTOM',
+                          child: Text('➕ Enter Custom Service Package...', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.primaryBlue)),
+                        ),
+                      ],
+                      onChanged: (val) => setDialogState(() => selectedServiceCode = val ?? 'CHECKUP'),
+                    ),
+                    if (selectedServiceCode == 'CUSTOM') ...[
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: customServiceCtrl,
+                        decoration: const InputDecoration(
+                          labelText: 'Custom Package Name *',
+                          hintText: 'e.g. Copper Piping Replacement & Nitrogen Testing',
+                          prefixIcon: Icon(Icons.handyman_outlined, color: AppTheme.primaryBlue, size: 20),
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 8),
+                    DropdownButtonFormField<String>(
+                      value: priority,
+                      isExpanded: true,
+                      decoration: const InputDecoration(labelText: 'Ticket Priority *'),
+                      items: const [
+                        DropdownMenuItem(value: 'LOW', child: Text('Low Priority', overflow: TextOverflow.ellipsis)),
+                        DropdownMenuItem(value: 'MEDIUM', child: Text('Medium Priority', overflow: TextOverflow.ellipsis)),
+                        DropdownMenuItem(value: 'HIGH', child: Text('High Priority', overflow: TextOverflow.ellipsis)),
+                        DropdownMenuItem(value: 'EMERGENCY', child: Text('Emergency', overflow: TextOverflow.ellipsis)),
+                      ],
+                      onChanged: (val) => setDialogState(() => priority = val ?? 'MEDIUM'),
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(controller: complaintCtrl, maxLines: 2, decoration: const InputDecoration(labelText: 'Service Description / Customer Issue *')),
+                    const SizedBox(height: 8),
+                    TextField(controller: brandCtrl, decoration: const InputDecoration(labelText: 'AC Brand (e.g. Daikin)')),
+                    const SizedBox(height: 8),
+                    DropdownButtonFormField<String>(
+                      value: ['SPLIT', 'WINDOW', 'CASSETTE', 'DUCTABLE', 'TOWER', 'VRF', 'MULTI_SPLIT', 'CUSTOM'].contains(acType) ? acType : 'CUSTOM',
+                      isExpanded: true,
+                      decoration: const InputDecoration(labelText: 'AC Type'),
+                      items: const [
+                        DropdownMenuItem(value: 'SPLIT', child: Text('Split AC')),
+                        DropdownMenuItem(value: 'WINDOW', child: Text('Window AC')),
+                        DropdownMenuItem(value: 'CASSETTE', child: Text('Cassette AC')),
+                        DropdownMenuItem(value: 'DUCTABLE', child: Text('Ductable / Concealed AC')),
+                        DropdownMenuItem(value: 'TOWER', child: Text('Tower / Floor Standing AC')),
+                        DropdownMenuItem(value: 'VRF', child: Text('VRF / VRV System')),
+                        DropdownMenuItem(value: 'MULTI_SPLIT', child: Text('Multi-Split AC')),
+                        DropdownMenuItem(
+                          value: 'CUSTOM',
+                          child: Text('➕ Custom AC Type (Specify below)...', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.primaryBlue)),
+                        ),
+                      ],
+                      onChanged: (val) => setDialogState(() => acType = val ?? 'SPLIT'),
+                    ),
+                    if (acType == 'CUSTOM') ...[
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: customAcTypeCtrl,
+                        decoration: const InputDecoration(
+                          labelText: 'Custom AC Type *',
+                          hintText: 'e.g. Precision AC / Chiller FCU / Central Plant',
+                          prefixIcon: Icon(Icons.mode_fan_off_outlined, color: AppTheme.primaryBlue, size: 20),
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 8),
+                    TextField(controller: dateCtrl, decoration: const InputDecoration(labelText: 'Scheduled Date (YYYY-MM-DD)')),
+                    const SizedBox(height: 8),
+                    DropdownButtonFormField<String>(
+                      value: timeSlot,
+                      isExpanded: true,
+                      decoration: const InputDecoration(labelText: 'Time Slot'),
+                      items: const [
+                        DropdownMenuItem(value: '09:00-11:00', child: Text('09:00 - 11:00 AM', overflow: TextOverflow.ellipsis)),
+                        DropdownMenuItem(value: '11:00-13:00', child: Text('11:00 - 01:00 PM', overflow: TextOverflow.ellipsis)),
+                        DropdownMenuItem(value: '14:00-16:00', child: Text('02:00 - 04:00 PM', overflow: TextOverflow.ellipsis)),
+                        DropdownMenuItem(value: '16:00-18:00', child: Text('04:00 - 06:00 PM', overflow: TextOverflow.ellipsis)),
+                      ],
+                      onChanged: (val) => setDialogState(() => timeSlot = val ?? '09:00-11:00'),
+                    ),
                   ],
-                  const SizedBox(height: 8),
-                  DropdownButtonFormField<String>(
-                    value: priority,
-                    isExpanded: true,
-                    decoration: const InputDecoration(labelText: 'Ticket Priority *'),
-                    items: const [
-                      DropdownMenuItem(value: 'LOW', child: Text('Low Priority', overflow: TextOverflow.ellipsis)),
-                      DropdownMenuItem(value: 'MEDIUM', child: Text('Medium Priority', overflow: TextOverflow.ellipsis)),
-                      DropdownMenuItem(value: 'HIGH', child: Text('High Priority', overflow: TextOverflow.ellipsis)),
-                      DropdownMenuItem(value: 'EMERGENCY', child: Text('Emergency', overflow: TextOverflow.ellipsis)),
-                    ],
-                    onChanged: (val) => setDialogState(() => priority = val ?? 'MEDIUM'),
-                  ),
-                  const SizedBox(height: 8),
-                  TextField(controller: complaintCtrl, maxLines: 2, decoration: const InputDecoration(labelText: 'Service Description / Customer Issue *')),
-                  const SizedBox(height: 8),
-                  TextField(controller: brandCtrl, decoration: const InputDecoration(labelText: 'AC Brand (e.g. Daikin)')),
-                  const SizedBox(height: 8),
-                  DropdownButtonFormField<String>(
-                    value: acType,
-                    isExpanded: true,
-                    decoration: const InputDecoration(labelText: 'AC Type'),
-                    items: const [
-                      DropdownMenuItem(value: 'SPLIT', child: Text('Split AC')),
-                      DropdownMenuItem(value: 'WINDOW', child: Text('Window AC')),
-                      DropdownMenuItem(value: 'CASSETTE', child: Text('Cassette AC')),
-                    ],
-                    onChanged: (val) => setDialogState(() => acType = val ?? 'SPLIT'),
-                  ),
-                  const SizedBox(height: 8),
-                  TextField(controller: dateCtrl, decoration: const InputDecoration(labelText: 'Scheduled Date (YYYY-MM-DD)')),
-                  const SizedBox(height: 8),
-                  DropdownButtonFormField<String>(
-                    value: timeSlot,
-                    isExpanded: true,
-                    decoration: const InputDecoration(labelText: 'Time Slot'),
-                    items: const [
-                      DropdownMenuItem(value: '09:00-11:00', child: Text('09:00 - 11:00 AM', overflow: TextOverflow.ellipsis)),
-                      DropdownMenuItem(value: '11:00-13:00', child: Text('11:00 - 01:00 PM', overflow: TextOverflow.ellipsis)),
-                      DropdownMenuItem(value: '14:00-16:00', child: Text('02:00 - 04:00 PM', overflow: TextOverflow.ellipsis)),
-                      DropdownMenuItem(value: '16:00-18:00', child: Text('04:00 - 06:00 PM', overflow: TextOverflow.ellipsis)),
-                    ],
-                    onChanged: (val) => setDialogState(() => timeSlot = val ?? '09:00-11:00'),
-                  ),
-                ],
+                ),
               ),
             ),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-            ElevatedButton(
-              onPressed: () async {
-                if (nameCtrl.text.isEmpty || phoneCtrl.text.isEmpty || addrCtrl.text.isEmpty || complaintCtrl.text.isEmpty) {
-                  ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('Please fill all mandatory fields (*)')));
-                  return;
-                }
-                if (selectedServiceCode == 'CUSTOM' && customServiceCtrl.text.trim().isEmpty) {
-                  ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('Please enter custom package name')));
-                  return;
-                }
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+              ElevatedButton(
+                onPressed: () async {
+                  if (nameCtrl.text.isEmpty || phoneCtrl.text.isEmpty || addrCtrl.text.isEmpty || complaintCtrl.text.isEmpty) {
+                    ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('Please fill all mandatory fields (*)')));
+                    return;
+                  }
+                  if (selectedServiceCode == 'CUSTOM' && customServiceCtrl.text.trim().isEmpty) {
+                    ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('Please enter custom package name')));
+                    return;
+                  }
+                  if (acType == 'CUSTOM' && customAcTypeCtrl.text.trim().isEmpty) {
+                    ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('Please enter custom AC type')));
+                    return;
+                  }
 
-                try {
-                  final serviceToUse = selectedServiceCode == 'CUSTOM' ? customServiceCtrl.text.trim() : selectedServiceCode;
-                  await ref.read(apiRepositoryProvider).createTicket(
-                        customerName: nameCtrl.text.trim(),
-                        customerPhone: phoneCtrl.text.trim(),
-                        addressLine: addrCtrl.text.trim(),
-                        area: areaCtrl.text.trim().isNotEmpty ? areaCtrl.text.trim() : 'Chennai Central',
-                        pincode: pinCtrl.text.trim(),
-                        serviceTypeId: serviceToUse,
-                        complaint: complaintCtrl.text.trim(),
-                        priority: priority,
-                        acBrand: brandCtrl.text.trim(),
-                        acType: acType,
-                        latitude: detectedLat,
-                        longitude: detectedLng,
-                        locationLink: locationLinkCtrl.text.trim().isNotEmpty ? locationLinkCtrl.text.trim() : null,
-                        preferredDate: dateCtrl.text.trim(),
-                        preferredTimeSlot: timeSlot,
+                  try {
+                    final serviceToUse = selectedServiceCode == 'CUSTOM' ? customServiceCtrl.text.trim() : selectedServiceCode;
+                    final finalAcType = acType == 'CUSTOM' ? customAcTypeCtrl.text.trim() : acType;
+                    await ref.read(apiRepositoryProvider).createTicket(
+                          customerName: nameCtrl.text.trim(),
+                          customerPhone: phoneCtrl.text.trim(),
+                          addressLine: addrCtrl.text.trim(),
+                          area: areaCtrl.text.trim().isNotEmpty ? areaCtrl.text.trim() : 'Chennai Central',
+                          pincode: pinCtrl.text.trim(),
+                          serviceTypeId: serviceToUse,
+                          complaint: complaintCtrl.text.trim(),
+                          priority: priority,
+                          acBrand: brandCtrl.text.trim(),
+                          acType: finalAcType,
+                          latitude: detectedLat,
+                          longitude: detectedLng,
+                          locationLink: locationLinkCtrl.text.trim().isNotEmpty ? locationLinkCtrl.text.trim() : null,
+                          preferredDate: dateCtrl.text.trim(),
+                          preferredTimeSlot: timeSlot,
+                        );
+                    if (ctx.mounted) Navigator.pop(ctx);
+                    ref.refresh(bookingRequestsProvider(_selectedStatus));
+                    ref.refresh(dashboardStatsProvider);
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Incident ticket logged successfully by staff!')),
                       );
-                  if (ctx.mounted) Navigator.pop(ctx);
-                  ref.refresh(bookingRequestsProvider(_selectedStatus));
-                  ref.refresh(dashboardStatsProvider);
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Incident ticket logged successfully by staff!')),
-                    );
+                    }
+                  } catch (e) {
+                    if (ctx.mounted) {
+                      final cleanMsg = ApiClient.formatErrorMessage(e);
+                      ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text(cleanMsg), backgroundColor: Colors.red));
+                    }
                   }
-                } catch (e) {
-                  if (ctx.mounted) {
-                    final cleanMsg = ApiClient.formatErrorMessage(e);
-                    ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text(cleanMsg), backgroundColor: Colors.red));
-                  }
-                }
-              },
-              child: const Text('Create Ticket'),
-            ),
-          ],
-        ),
+                },
+                child: const Text('Create Ticket'),
+              ),
+            ],
+          );
+        },
       ),
     );
   }

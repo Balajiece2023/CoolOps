@@ -630,6 +630,24 @@ model FieldServiceReport {
   equip1Details        String?
   equip2Details        String?
 
+  // Final Test Measurements (As applicable)
+  powerServoStab       String?       // "YES" | "NO" | "Yes" | "No"
+  voltageNEarth        String?       // Voltage (N- Earth)
+  voltageL1N           String?       // Voltage (L1-N)
+  voltageL2N           String?       // Voltage (L2-N)
+  voltageL3N           String?       // Voltage (L3-N)
+  voltageL1L2          String?       // Voltage (L1 - L2)
+  voltageL2L3          String?       // Voltage (L2 - L3)
+  voltageL3L1          String?       // Voltage (L3 - L1)
+  pressSuc             String?       // Press (Suc) in psi
+  pressDis             String?       // Press (Dis) in psi
+  compCurrent          String?       // Comp. Current in Amp
+  unitCurrents         String?       // Unit Currents in Amp
+  roomTemp             String?       // Room Temp. in °C
+  supplyAirTemp        String?       // Supply Air Temp. in °C
+  returnAirTemp        String?       // Return Air Temp. in °C
+  ambientTemp          String?       // Ambient Temp. in °C
+
   // Observations / Report & Action
   observations         String        // What was checked / parts changed / run test
   suggestions          String?       // Suggestion to customer

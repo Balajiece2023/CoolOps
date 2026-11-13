@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/constants/app_branding.dart';
-import '../../core/constants/app_constants.dart';
 import '../../core/network/api_client.dart';
 import '../../core/theme/app_theme.dart';
 import '../providers/app_providers.dart';
@@ -21,27 +19,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   bool _isLoading = false;
   bool _obscurePassword = true;
   String? _errorMessage;
-  String _currentServerUrl = AppConstants.defaultApiUrl;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadSavedServerUrl();
-  }
 
   @override
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
-  }
-
-  Future<void> _loadSavedServerUrl() async {
-    final prefs = await SharedPreferences.getInstance();
-    final saved = prefs.getString(AppConstants.keyCustomApiUrl);
-    if (saved != null && saved.isNotEmpty && mounted) {
-      setState(() => _currentServerUrl = saved);
-    }
   }
 
   Future<void> _handleLogin() async {
@@ -71,86 +54,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
-  }
-
-  void _showServerConfigDialog() {
-    final controller = TextEditingController(text: _currentServerUrl);
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Row(
-          children: [
-            Icon(Icons.settings_ethernet, color: AppTheme.primaryBlue),
-            SizedBox(width: 8),
-            Text('Server Backend URL', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Select or enter the URL where your Node.js backend is hosted:',
-              style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: controller,
-              decoration: const InputDecoration(
-                labelText: 'Backend API Endpoint',
-                hintText: AppConstants.productionApiUrl,
-              ),
-            ),
-            const SizedBox(height: 12),
-            const Text('Quick Presets:', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 6),
-            Wrap(
-              spacing: 6,
-              runSpacing: 6,
-              children: [
-                ActionChip(
-                  label: const Text('Production (Railway)', style: TextStyle(fontSize: 10)),
-                  onPressed: () => controller.text = AppConstants.productionApiUrl,
-                ),
-                ActionChip(
-                  label: const Text('Wi-Fi LAN IP', style: TextStyle(fontSize: 10)),
-                  onPressed: () => controller.text = AppConstants.lanApiUrl,
-                ),
-                ActionChip(
-                  label: const Text('127.0.0.1 (USB adb)', style: TextStyle(fontSize: 10)),
-                  onPressed: () => controller.text = AppConstants.usbApiUrl,
-                ),
-              ],
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          ElevatedButton(
-            onPressed: () async {
-              final newUrl = controller.text.trim();
-              if (newUrl.isNotEmpty) {
-                final prefs = await SharedPreferences.getInstance();
-                if (newUrl == AppConstants.defaultApiUrl) {
-                  await prefs.remove(AppConstants.keyCustomApiUrl);
-                } else {
-                  await prefs.setString(AppConstants.keyCustomApiUrl, newUrl);
-                }
-                setState(() => _currentServerUrl = newUrl);
-                if (ctx.mounted) Navigator.pop(ctx);
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Server endpoint set to: $newUrl')),
-                  );
-                }
-              }
-            },
-            child: const Text('Save & Apply'),
-          ),
-        ],
-      ),
-    );
   }
 
   void _showForgotPasswordDialog() {
@@ -449,18 +352,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                 child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
                               )
                             : const Text('Sign In to Workspace'),
-                      ),
-                      const SizedBox(height: 20),
-                      Center(
-                        child: TextButton.icon(
-                          onPressed: _showServerConfigDialog,
-                          icon: const Icon(Icons.dns_outlined, size: 14, color: AppTheme.primaryBlue),
-                          label: Text(
-                            'Server: $_currentServerUrl',
-                            style: const TextStyle(fontSize: 11, color: Color(0xFF64748B), decoration: TextDecoration.underline),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
                       ),
                     ],
                   ),

@@ -22,11 +22,6 @@ class ApiClient {
       InterceptorsWrapper(
         onRequest: (options, handler) async {
           final prefs = await SharedPreferences.getInstance();
-          final customUrl = prefs.getString(AppConstants.keyCustomApiUrl);
-          if (customUrl != null && customUrl.isNotEmpty) {
-            options.baseUrl = customUrl;
-          }
-
           final token = prefs.getString(AppConstants.keyAccessToken);
           if (token != null && token.isNotEmpty) {
             options.headers['Authorization'] = 'Bearer $token';
@@ -43,10 +38,8 @@ class ApiClient {
             // Attempt seamless token refresh if available
             if (refreshToken != null && refreshToken.isNotEmpty && !path.contains('/auth/refresh')) {
               try {
-                final customUrl = prefs.getString(AppConstants.keyCustomApiUrl);
-                final activeBase = (customUrl != null && customUrl.isNotEmpty) ? customUrl : dio.options.baseUrl;
                 final refreshDio = Dio(BaseOptions(
-                  baseUrl: activeBase,
+                  baseUrl: dio.options.baseUrl,
                   connectTimeout: const Duration(seconds: 10),
                   receiveTimeout: const Duration(seconds: 10),
                 ));
@@ -81,11 +74,6 @@ class ApiClient {
   }
 
   Future<String> getBaseUrl() async {
-    final prefs = await SharedPreferences.getInstance();
-    final customUrl = prefs.getString(AppConstants.keyCustomApiUrl);
-    if (customUrl != null && customUrl.isNotEmpty) {
-      return customUrl;
-    }
     return dio.options.baseUrl;
   }
 
