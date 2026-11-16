@@ -168,3 +168,17 @@ export function startServer() {
 
   return server;
 }
+
+// Support both ES Module default and CommonJS module.exports for Vercel Serverless
+// @ts-ignore
+module.exports = app;
+// @ts-ignore
+module.exports.default = app;
+// @ts-ignore
+module.exports.app = app;
+// @ts-ignore
+module.exports.startServer = startServer;
+
+export default app;
+
+

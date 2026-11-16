@@ -1,3 +1,13 @@
-import { startServer } from './app';
+import app, { startServer } from './app';
 
-startServer();
+if (!process.env.VERCEL) {
+  startServer();
+}
+
+// @ts-ignore
+module.exports = app;
+// @ts-ignore
+module.exports.default = app;
+
+export default app;
+
