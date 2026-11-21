@@ -175,7 +175,7 @@ export class SmsService {
     const slotStr = timeSlot ? ` (${timeSlot})` : '';
 
     // Keep message under 100 characters for gateway compatibility
-    let message = `Caring Cool Tech: AC Booking #${ref} created for ${dateStr}${slotStr}. Ph: 9677686561`;
+    let message = `Caring Cool Tech: AC Complaint Booking #${ref} created for ${dateStr}${slotStr}. Ph: 9677686561`;
     if (message.length > 100) {
       message = `CCT AC Service: Booking #${ref} created for ${dateStr}. Ph: 9677686561`;
     }
@@ -207,7 +207,7 @@ export class SmsService {
     const dateStr = formatDateForSms(scheduledDate);
     const techPart = technicianName ? ` Tech: ${technicianName.split(' ')[0]}.` : '';
 
-    let message = `Caring Cool Tech: AC Booking #${num} confirmed for ${dateStr}.${techPart} Ph: 9677686561`;
+    let message = `Caring Cool Tech: AC Complaint Booking #${num} confirmed for ${dateStr}.${techPart} Ph: 9677686561`;
     if (message.length > 100) {
       message = `CCT: Booking #${num} confirmed for ${dateStr}.${techPart} Ph: 9677686561`;
     }
