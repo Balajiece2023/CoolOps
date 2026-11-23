@@ -168,6 +168,171 @@ attendanceRouter.post('/clock-out', async (req: Request, res: Response) => {
   }
 });
 
+// 2b. Admin Clock Out (Admin / Booking Staff override for any technician)
+const adminClockOutSchema = z.object({
+  technicianId: z.string().min(1, 'technicianId is required'),
+  clockOutAt: z.string().optional(),
+  notes: z.string().optional()
+});
+
+attendanceRouter.post('/admin/clock-out', authorize(Role.ADMIN, Role.BOOKING_STAFF), async (req: Request, res: Response) => {
+  const parseResult = adminClockOutSchema.safeParse(req.body);
+  if (!parseResult.success) {
+    return res.status(400).json({
+      success: false,
+      error: { code: 'VALIDATION_ERROR', message: parseResult.error.errors[0]?.message || 'Invalid input' }
+    });
+  }
+
+  const { technicianId, clockOutAt, notes } = parseResult.data;
+
+  try {
+    const tech = await prisma.technician.findUnique({
+      where: { id: technicianId },
+      include: {
+        user: { select: { id: true, name: true, phone: true, email: true } }
+      }
+    });
+
+    if (!tech) {
+      return res.status(404).json({
+        success: false,
+        error: { code: 'NOT_FOUND', message: 'Technician not found' }
+      });
+    }
+
+    // Find active unclosed attendance sessions for this technician
+    const activeSessions = await prisma.technicianAttendance.findMany({
+      where: {
+        technicianId,
+        clockOutAt: null
+      },
+      orderBy: { clockInAt: 'desc' }
+    });
+
+    let clockOutTime = new Date();
+    if (clockOutAt) {
+      const parsed = new Date(clockOutAt);
+      if (isNaN(parsed.getTime())) {
+        return res.status(400).json({
+          success: false,
+          error: { code: 'INVALID_DATE', message: 'Invalid clock-out timestamp format' }
+        });
+      }
+      clockOutTime = parsed;
+    }
+
+    const adminUser = req.user!;
+    const adminName = adminUser.email || 'Admin';
+    const reasonText = notes?.trim() || 'Technician forgot to clock out';
+
+    if (activeSessions.length === 0) {
+      // No active session found; ensure technician status is marked offline
+      await prisma.technician.update({
+        where: { id: technicianId },
+        data: {
+          isOnline: false,
+          isAvailable: false
+        }
+      });
+
+      return res.json({
+        success: true,
+        message: `${tech.user.name} had no active shift session. Status set to offline.`,
+        data: null
+      });
+    }
+
+    const latestActive = activeSessions[0];
+
+    // Ensure clock-out time is not earlier than clock-in time
+    if (clockOutTime.getTime() < new Date(latestActive.clockInAt).getTime()) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'INVALID_TIME',
+          message: `Clock-out time cannot be earlier than clock-in time (${new Date(latestActive.clockInAt).toLocaleTimeString()})`
+        }
+      });
+    }
+
+    const diffMs = clockOutTime.getTime() - new Date(latestActive.clockInAt).getTime();
+    const totalMinutes = Math.max(1, Math.round(diffMs / (1000 * 60)));
+
+    const updatedNotes = latestActive.notes
+      ? `${latestActive.notes}; [Admin Clock-Out by ${adminName}]: ${reasonText}`
+      : `[Admin Clock-Out by ${adminName}]: ${reasonText}`;
+
+    const attendance = await prisma.$transaction(async (tx) => {
+      // Close latest active session
+      const record = await tx.technicianAttendance.update({
+        where: { id: latestActive.id },
+        data: {
+          clockOutAt: clockOutTime,
+          totalMinutes,
+          notes: updatedNotes
+        }
+      });
+
+      // Close any older dangling unclosed sessions for this technician
+      for (let i = 1; i < activeSessions.length; i++) {
+        const older = activeSessions[i];
+        const olderDiff = Math.max(1, Math.round((clockOutTime.getTime() - new Date(older.clockInAt).getTime()) / (1000 * 60)));
+        await tx.technicianAttendance.update({
+          where: { id: older.id },
+          data: {
+            clockOutAt: clockOutTime,
+            totalMinutes: Math.min(480, olderDiff),
+            notes: older.notes ? `${older.notes}; (Auto-closed by Admin)` : '(Auto-closed by Admin)'
+          }
+        });
+      }
+
+      // Mark technician as offline and unavailable
+      await tx.technician.update({
+        where: { id: technicianId },
+        data: {
+          isOnline: false,
+          isAvailable: false
+        }
+      });
+
+      return record;
+    });
+
+    try {
+      await prisma.auditLog.create({
+        data: {
+          userId: adminUser.userId,
+          action: 'ADMIN_CLOCK_OUT',
+          entityType: 'TechnicianAttendance',
+          entityId: latestActive.id,
+          newValues: {
+            technicianId,
+            technicianName: tech.user.name,
+            clockOutAt: clockOutTime.toISOString(),
+            totalMinutes,
+            notes: updatedNotes
+          }
+        }
+      });
+    } catch (_) {
+      // Non-blocking audit log
+    }
+
+    const hours = Math.floor(totalMinutes / 60);
+    const mins = totalMinutes % 60;
+
+    return res.json({
+      success: true,
+      message: `Successfully clocked out ${tech.user.name}. Shift session closed (${hours}h ${mins}m).`,
+      data: attendance
+    });
+  } catch (err: any) {
+    return res.status(400).json({ success: false, error: { code: 'ADMIN_CLOCK_OUT_FAILED', message: err.message } });
+  }
+});
+
 // 3. Get Current Day Attendance Status & Consolidated Time
 attendanceRouter.get('/today', async (req: Request, res: Response) => {
   const user = req.user!;

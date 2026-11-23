@@ -445,6 +445,20 @@ class ApiRepository {
     return res.data['data'];
   }
 
+  // Admin / Booking Staff manual Clock-Out override for a technician
+  Future<Map<String, dynamic>> adminClockOutTechnician({
+    required String technicianId,
+    DateTime? clockOutTime,
+    String? notes,
+  }) async {
+    final res = await _client.dio.post('/attendance/admin/clock-out', data: {
+      'technicianId': technicianId,
+      if (clockOutTime != null) 'clockOutAt': clockOutTime.toIso8601String(),
+      if (notes != null && notes.isNotEmpty) 'notes': notes,
+    });
+    return res.data;
+  }
+
   Future<Map<String, dynamic>?> getTodayAttendance() async {
     final res = await _client.dio.get('/attendance/today');
     return res.data['data'];

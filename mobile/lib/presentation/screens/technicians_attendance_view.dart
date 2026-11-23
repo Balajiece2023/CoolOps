@@ -297,6 +297,242 @@ class _TechniciansAttendanceViewState extends ConsumerState<TechniciansAttendanc
     );
   }
 
+  void _showAdminClockOutDialog(Map<String, dynamic> tech) {
+    final user = tech['user'] ?? {};
+    final techName = user['name'] ?? tech['technicianName'] ?? 'Technician';
+    final techId = (tech['id'] ?? tech['technicianId'] ?? '').toString();
+
+    DateTime selectedClockOutTime = DateTime.now();
+    bool useCustomTime = false;
+    final notesCtrl = TextEditingController(text: 'Technician forgot to clock out');
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) {
+          final isDark = Theme.of(ctx).brightness == Brightness.dark;
+
+          return AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            title: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.redAccent.withOpacity(0.12),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.logout_rounded, color: Colors.redAccent, size: 22),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Admin Clock Out',
+                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                      ),
+                      Text(
+                        techName,
+                        style: const TextStyle(fontSize: 12, color: Color(0xFF64748B), fontWeight: FontWeight.normal),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: isDark ? const Color(0xFF1E293B) : const Color(0xFFFEF2F2),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.redAccent.withOpacity(0.2)),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Icon(Icons.info_outline, color: Colors.redAccent, size: 18),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Use this when $techName forgot to clock out at the end of their shift. This will stop GPS tracking, record their working hours, and set their status to Offline.',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: isDark ? const Color(0xFFE2E8F0) : const Color(0xFF991B1B),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text('Clock Out Time', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ChoiceChip(
+                          label: const Text('Now (Current)'),
+                          selected: !useCustomTime,
+                          selectedColor: AppTheme.primaryBlue.withOpacity(0.15),
+                          onSelected: (val) {
+                            if (val) {
+                              setDialogState(() {
+                                useCustomTime = false;
+                                selectedClockOutTime = DateTime.now();
+                              });
+                            }
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: ChoiceChip(
+                          label: const Text('Custom Time'),
+                          selected: useCustomTime,
+                          selectedColor: AppTheme.primaryBlue.withOpacity(0.15),
+                          onSelected: (val) async {
+                            if (val) {
+                              final pickedTime = await showTimePicker(
+                                context: ctx,
+                                initialTime: TimeOfDay.fromDateTime(selectedClockOutTime),
+                              );
+                              if (pickedTime != null) {
+                                final now = DateTime.now();
+                                setDialogState(() {
+                                  useCustomTime = true;
+                                  selectedClockOutTime = DateTime(
+                                    now.year,
+                                    now.month,
+                                    now.day,
+                                    pickedTime.hour,
+                                    pickedTime.minute,
+                                  );
+                                });
+                              }
+                            }
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (useCustomTime) ...[
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.access_time, size: 16, color: AppTheme.primaryBlue),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Selected: ${DateFormat('hh:mm a').format(selectedClockOutTime)}',
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                          ),
+                          const Spacer(),
+                          TextButton(
+                            onPressed: () async {
+                              final pickedTime = await showTimePicker(
+                                context: ctx,
+                                initialTime: TimeOfDay.fromDateTime(selectedClockOutTime),
+                              );
+                              if (pickedTime != null) {
+                                final now = DateTime.now();
+                                setDialogState(() {
+                                  selectedClockOutTime = DateTime(
+                                    now.year,
+                                    now.month,
+                                    now.day,
+                                    pickedTime.hour,
+                                    pickedTime.minute,
+                                  );
+                                });
+                              }
+                            },
+                            child: const Text('Change', style: TextStyle(fontSize: 12)),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 16),
+                  const Text('Admin Note / Reason', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                  const SizedBox(height: 6),
+                  TextField(
+                    controller: notesCtrl,
+                    maxLines: 2,
+                    decoration: InputDecoration(
+                      hintText: 'e.g. Technician forgot to clock out',
+                      filled: true,
+                      fillColor: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.redAccent,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                ),
+                icon: const Icon(Icons.logout_rounded, size: 18),
+                label: const Text('Confirm Clock Out', style: TextStyle(fontWeight: FontWeight.bold)),
+                onPressed: () async {
+                  try {
+                    final res = await ref.read(apiRepositoryProvider).adminClockOutTechnician(
+                          technicianId: techId,
+                          clockOutTime: useCustomTime ? selectedClockOutTime : null,
+                          notes: notesCtrl.text.trim(),
+                        );
+                    if (ctx.mounted) Navigator.pop(ctx);
+                    await _loadData();
+                    if (mounted) {
+                      final msg = res['message'] ?? 'Technician clocked out successfully!';
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(msg),
+                          backgroundColor: AppTheme.accentEmerald,
+                          duration: const Duration(seconds: 4),
+                        ),
+                      );
+                    }
+                  } catch (e) {
+                    if (ctx.mounted) {
+                      ScaffoldMessenger.of(ctx).showSnackBar(
+                        SnackBar(
+                          content: Text('Clock-out failed: $e'),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                    }
+                  }
+                },
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
   void _showTechnicianReportModal(Map<String, dynamic> tech) {
     final user = tech['user'] ?? {};
     final techId = tech['id'] as String;
@@ -757,6 +993,12 @@ class _TechniciansAttendanceViewState extends ConsumerState<TechniciansAttendanc
                   ),
                 ),
                 if (isActive) ...[
+                  if (isOnline)
+                    IconButton(
+                      icon: const Icon(Icons.logout_rounded, color: Colors.redAccent, size: 20),
+                      tooltip: 'Clock Out Technician (Admin)',
+                      onPressed: () => _showAdminClockOutDialog(tech),
+                    ),
                   IconButton(
                     icon: const Icon(Icons.picture_as_pdf_outlined, color: Colors.indigo, size: 20),
                     tooltip: 'Technician Dossier & Report',
@@ -1071,35 +1313,50 @@ class _TechniciansAttendanceViewState extends ConsumerState<TechniciansAttendanc
                     ),
                   ],
                   const SizedBox(height: 12),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF0F172A),
-                        foregroundColor: Colors.white,
-                        elevation: 0,
-                        padding: const EdgeInsets.symmetric(vertical: 10),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                      ),
-                      icon: const Icon(Icons.location_searching_rounded, color: Color(0xFF38BDF8), size: 16),
-                      label: const Text('📍 Open Live Map Tracking', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                      onPressed: () {
-                        final activeJobId = hasActiveJob ? (jobs[0]['id'] ?? 'demo-job-id') : 'demo-job-id';
-                        final jobNumber = hasActiveJob ? (jobs[0]['jobNumber'] ?? 'JOB-ACTIVE') : 'JOB-CHENNAI';
-                        final custName = hasActiveJob ? (jobs[0]['booking']?['customer']?['name'] ?? 'Customer') : 'Customer Location';
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => TechnicianLiveTrackingScreen(
-                              jobId: activeJobId,
-                              initialJobNumber: jobNumber,
-                              initialCustomerName: custName,
-                              initialTechName: user['name'] ?? 'Technician',
-                            ),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF0F172A),
+                            foregroundColor: Colors.white,
+                            elevation: 0,
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                           ),
-                        );
-                      },
-                    ),
+                          icon: const Icon(Icons.location_searching_rounded, color: Color(0xFF38BDF8), size: 16),
+                          label: const Text('📍 Open Live Map Tracking', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                          onPressed: () {
+                            final activeJobId = hasActiveJob ? (jobs[0]['id'] ?? 'demo-job-id') : 'demo-job-id';
+                            final jobNumber = hasActiveJob ? (jobs[0]['jobNumber'] ?? 'JOB-ACTIVE') : 'JOB-CHENNAI';
+                            final custName = hasActiveJob ? (jobs[0]['booking']?['customer']?['name'] ?? 'Customer') : 'Customer Location';
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => TechnicianLiveTrackingScreen(
+                                  jobId: activeJobId,
+                                  initialJobNumber: jobNumber,
+                                  initialCustomerName: custName,
+                                  initialTechName: user['name'] ?? 'Technician',
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          side: const BorderSide(color: Colors.redAccent),
+                          foregroundColor: Colors.redAccent,
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                        icon: const Icon(Icons.logout_rounded, color: Colors.redAccent, size: 16),
+                        label: const Text('Clock Out', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                        onPressed: () => _showAdminClockOutDialog(item),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -1332,6 +1589,29 @@ class _TechniciansAttendanceViewState extends ConsumerState<TechniciansAttendanc
                               ],
                             ),
                           ),
+                          if (isWorkingNow) ...[
+                            InkWell(
+                              onTap: () => _showAdminClockOutDialog(techObj),
+                              borderRadius: BorderRadius.circular(8),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFFEF2F2),
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(color: Colors.redAccent.withOpacity(0.4)),
+                                ),
+                                child: const Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.logout_rounded, size: 12, color: Colors.redAccent),
+                                    SizedBox(width: 4),
+                                    Text('CLOCK OUT', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.redAccent)),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                          ],
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                             decoration: BoxDecoration(
@@ -1374,6 +1654,23 @@ class _TechniciansAttendanceViewState extends ConsumerState<TechniciansAttendanc
                         ),
                       ),
                       const SizedBox(height: 12),
+                      if (isWorkingNow) ...[
+                        SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton.icon(
+                            style: OutlinedButton.styleFrom(
+                              side: const BorderSide(color: Colors.redAccent),
+                              foregroundColor: Colors.redAccent,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                              padding: const EdgeInsets.symmetric(vertical: 8),
+                            ),
+                            icon: const Icon(Icons.logout_rounded, color: Colors.redAccent, size: 16),
+                            label: const Text('Admin Clock Out (End Active Shift)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                            onPressed: () => _showAdminClockOutDialog(techObj),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                      ],
 
                       // Individual Shift Intervals breakdown
                       if (sessions.isNotEmpty) ...[

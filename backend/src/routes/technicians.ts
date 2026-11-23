@@ -268,6 +268,99 @@ techniciansRouter.patch('/availability', async (req: Request, res: Response) => 
   }
 });
 
+// 4b. Admin Clock-Out for Technician (Admin & Booking Staff)
+techniciansRouter.post('/:id/clock-out', authorize(Role.ADMIN, Role.BOOKING_STAFF), async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { clockOutAt, notes } = req.body;
+
+  try {
+    const tech = await prisma.technician.findUnique({
+      where: { id },
+      include: { user: { select: { name: true, phone: true } } }
+    });
+
+    if (!tech) {
+      return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Technician not found' } });
+    }
+
+    const activeSessions = await prisma.technicianAttendance.findMany({
+      where: { technicianId: id, clockOutAt: null },
+      orderBy: { clockInAt: 'desc' }
+    });
+
+    let clockOutTime = new Date();
+    if (clockOutAt) {
+      const parsed = new Date(clockOutAt);
+      if (!isNaN(parsed.getTime())) clockOutTime = parsed;
+    }
+
+    const adminName = req.user?.email || 'Admin';
+    const reasonText = notes?.trim() || 'Technician forgot to clock out';
+
+    if (activeSessions.length === 0) {
+      await prisma.technician.update({
+        where: { id },
+        data: { isOnline: false, isAvailable: false }
+      });
+      return res.json({
+        success: true,
+        message: `${tech.user.name} had no active shift session. Status set to offline.`,
+        data: null
+      });
+    }
+
+    const latestActive = activeSessions[0];
+    const diffMs = Math.max(0, clockOutTime.getTime() - new Date(latestActive.clockInAt).getTime());
+    const totalMinutes = Math.max(1, Math.round(diffMs / (1000 * 60)));
+
+    const updatedNotes = latestActive.notes
+      ? `${latestActive.notes}; [Admin Clock-Out by ${adminName}]: ${reasonText}`
+      : `[Admin Clock-Out by ${adminName}]: ${reasonText}`;
+
+    const attendance = await prisma.$transaction(async (tx) => {
+      const record = await tx.technicianAttendance.update({
+        where: { id: latestActive.id },
+        data: {
+          clockOutAt: clockOutTime,
+          totalMinutes,
+          notes: updatedNotes
+        }
+      });
+
+      for (let i = 1; i < activeSessions.length; i++) {
+        const older = activeSessions[i];
+        const olderDiff = Math.max(1, Math.round((clockOutTime.getTime() - new Date(older.clockInAt).getTime()) / (1000 * 60)));
+        await tx.technicianAttendance.update({
+          where: { id: older.id },
+          data: {
+            clockOutAt: clockOutTime,
+            totalMinutes: Math.min(480, olderDiff),
+            notes: older.notes ? `${older.notes}; (Auto-closed by Admin)` : '(Auto-closed by Admin)'
+          }
+        });
+      }
+
+      await tx.technician.update({
+        where: { id },
+        data: { isOnline: false, isAvailable: false }
+      });
+
+      return record;
+    });
+
+    const hours = Math.floor(totalMinutes / 60);
+    const mins = totalMinutes % 60;
+
+    return res.json({
+      success: true,
+      message: `Successfully clocked out ${tech.user.name}. Shift session closed (${hours}h ${mins}m).`,
+      data: attendance
+    });
+  } catch (err: any) {
+    return res.status(400).json({ success: false, error: { code: 'ADMIN_CLOCK_OUT_FAILED', message: err.message } });
+  }
+});
+
 const locationPingSchema = z.object({
   latitude: z.number(),
   longitude: z.number()
